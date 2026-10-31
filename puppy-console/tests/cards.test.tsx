@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import { byStage, collectorCounts, cut, detailLines, MAX_SQUARES, picture, unknownStages } from '../hooks/draw'
-import { ago, alerts, expandHome, isFolded, isOlder, isStale, markOf, OLDER_MS, parseStatus, sortCards, splitCards, textBar, toggleFold } from '../hooks/format'
+import { ago, alerts, expandHome, isFolded, isOlder, isOpenable, MAX_ACTIONS, parseActions, isStale, markOf, OLDER_MS, parseStatus, sortCards, splitCards, textBar, toggleFold } from '../hooks/format'
 import type { Snapshot, Status } from '../types'
 
 const base = {
@@ -299,4 +299,31 @@ test('video: a gate job the waiting lines do not name keeps its name on the term
   const six = Array.from({ length: 6 }, (_, i) => ({ id: `w${i}`, text: `approve ep0${i}` }))
   const many = parseStatus(file({ pipeline: 'ai-video', detail: { jobs: [{ job: 'ep05', stage: 'final', spend_usd: 0, cap_usd: 1 }] }, waiting: six }))
   expect(detailLines(many)).toEqual(['final (you): ep05'])
+})
+
+test('a waiting item keeps only buttons with a short label and exactly one of open or fill', () => {
+  const s = parseStatus(file({ waiting: [{ id: 'f', text: 'check ep04', actions: [
+    { label: 'play', open: '/v/ep04/final.mp4' },
+    { label: 'send back', fill: 'ep04 final goes back because: ' },
+    { label: 'both', open: '/v/a.mp4', fill: 'x' },
+    { label: '', open: '/v/a.mp4' },
+    { label: 'x'.repeat(25), open: '/v/a.mp4' },
+    { label: 'empty', fill: '  ' },
+    'junk',
+  ] }] }))
+  expect(s.waiting![0]!.actions).toEqual([
+    { label: 'play', open: '/v/ep04/final.mp4' },
+    { label: 'send back', fill: 'ep04 final goes back because: ' },
+  ])
+  // no buttons: no actions key at all, so an item reads as before
+  expect(parseStatus(file({ waiting: [{ id: 'a', text: 'b', actions: 'no' }] })).waiting).toEqual([{ id: 'a', text: 'b' }])
+  expect(parseActions(Array.from({ length: 9 }, (_, i) => ({ label: `f${i}`, fill: 'x' })))).toHaveLength(MAX_ACTIONS)
+})
+
+test('the pane opens only things to look at or listen to, by a full path', () => {
+  for (const ok of ['/v/ep04.mp4', '~/Music/06/12.wav', '/v/batch 06/', '/p/board.PNG', '/d/a.pdf'])
+    expect([ok, isOpenable(ok)]).toEqual([ok, true])
+  for (const no of ['v/ep04.mp4', '/Applications/Calculator.app', '/Applications/Calculator.app/', '/x/run.command',
+    '/x/a.app/Contents/Resources/icon.png', '/v/../etc/a.mp4', '/x/script.sh', '/x/page.html', '/x/a.mp4\0', '-a/x.mp4'])
+    expect([no, isOpenable(no)]).toEqual([no, false])
 })

@@ -4,7 +4,12 @@ export type Json = string | number | boolean | null | Json[] | { [key: string]: 
 // One status file, as FORMAT.md describes it (format "pipeline-status", version 1).
 export type State = 'running' | 'idle' | 'waiting' | 'error'
 
-export type WaitingItem = { id: string; text: string; since?: string }
+// A button under a waiting item (FORMAT.md, "actions"): exactly one of open or fill.
+// open: a file or folder on this computer the pane opens (a video, a song, a batch folder);
+// fill: words the pane puts in the prompt box, for you to finish and send.
+export type WaitingAction = { label: string; open?: string; fill?: string }
+
+export type WaitingItem = { id: string; text: string; since?: string; actions?: WaitingAction[] }
 
 export type Status = {
   format: 'pipeline-status'
@@ -104,6 +109,8 @@ declare module 'claude-code' {
       isShowingDone: boolean
       // this conversation's last write of its own file failed, and why
       writeError: string | null
+      // what the last press of a waiting item's button did, or why it could not
+      actionNote: { text: string; isError: boolean } | null
     }
   }
 }

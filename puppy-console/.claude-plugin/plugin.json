@@ -1,6 +1,6 @@
 {
   "name": "puppy-console",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "a pane with your conversations first, then one card per production pipeline, read from small status files",
   "types": "./types/index.d.ts",
   "author": {
