@@ -1,5 +1,5 @@
 // Reading one status file (FORMAT.md). Pure functions, so the tests need no engine.
-import type { Snapshot, State, Status } from '../types'
+import type { Snapshot, State, Status, WaitingAction } from '../types'
 
 const STATES: readonly State[] = ['running', 'idle', 'waiting', 'error']
 
@@ -39,12 +39,50 @@ export function parseStatus(text: string): Status {
       ? { label: last.label as string, ...(str(last.at) ? { at: str(last.at) } : {}), ...(str(last.path) ? { path: str(last.path) } : {}) }
       : null,
     // an item with no id is known by its words, so a new one is still news
-    waiting: ((v.waiting as unknown[] | undefined) ?? []).filter(isObject).map(w => ({
-      id: str(w.id) || String(w.text ?? ''),
-      text: String(w.text ?? ''),
-      ...(typeof w.since === 'string' ? { since: w.since } : {}),
-    })),
+    waiting: ((v.waiting as unknown[] | undefined) ?? []).filter(isObject).map(w => {
+      const actions = parseActions(w.actions)
+      return {
+        id: str(w.id) || String(w.text ?? ''),
+        text: String(w.text ?? ''),
+        ...(typeof w.since === 'string' ? { since: w.since } : {}),
+        ...(actions.length ? { actions } : {}),
+      }
+    }),
   }
+}
+
+export const MAX_ACTIONS = 3
+const MAX_LABEL = 24
+const MAX_FILL = 500
+
+// A waiting item's buttons. One that is not a short label with exactly one of open or fill is
+// dropped, like any odd field; an open that is not a file the pane may open is dropped too.
+export function parseActions(v: unknown): WaitingAction[] {
+  if (!Array.isArray(v)) return []
+  const out: WaitingAction[] = []
+  for (const a of v.filter(isObject)) {
+    const label = typeof a.label === 'string' ? a.label.trim() : ''
+    if (!label || label.length > MAX_LABEL) continue
+    const open = typeof a.open === 'string' ? a.open : undefined
+    const fill = typeof a.fill === 'string' ? a.fill : undefined
+    if (open != null && fill == null && isOpenable(open)) out.push({ label, open })
+    else if (fill != null && open == null && fill.trim() && fill.length <= MAX_FILL) out.push({ label, fill })
+    if (out.length === MAX_ACTIONS) break
+  }
+  return out
+}
+
+// What a status file may ask the pane to open. Status files can come from a synced folder, so
+// the pane opens only something to look at or listen to, never something that runs: a full path
+// (or ~/…) to a picture, a video, a sound or a pdf, or to a folder (ending in /) that is not an
+// app or another bundle the system would start.
+const VIEWABLE = /\.(mp4|mov|m4v|webm|mkv|mp3|wav|m4a|aac|flac|ogg|png|jpe?g|gif|webp|pdf)$/i
+const RUNNABLE = /\.(app|bundle|pkg|mpkg|command|tool|workflow|terminal|prefpane|plugin|kext)\/?$/i
+export function isOpenable(path: string): boolean {
+  if (!(path.startsWith('/') || path.startsWith('~/')) || path.includes('\0') || path.length > 1024) return false
+  const parts = path.split('/').filter(Boolean)
+  if (parts.some(p => p === '..' || RUNNABLE.test(p))) return false
+  return path.endsWith('/') || VIEWABLE.test(path)
 }
 
 // Quiet for longer than the writer promised. A file without stale_after_sec is never stale.

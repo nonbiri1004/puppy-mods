@@ -189,14 +189,13 @@ test('a card folds to its header line and opens again; the store remembers', { o
   await ui.press({ key: 'fold-music' })
   expect((await ui.find({ key: 'fold-music' }))?.text).toMatch(/^▸ music/)
   expect(await ui.find({ type: 'Text', text: '05 · 42/70 usable' })).toBeFalsy()
-  expect(await ui.find({ type: 'Text', text: 'hear song 7' })).toBeFalsy()
-  // folded, the line still says what waits for you
+  // folded, the line still says what waits for you, and the "for you" card still lists it
   expect(await ui.find({ type: 'Text', text: /1 for you/ })).toBeTruthy()
+  expect(textOf(await ui.find({ key: 'card-for-you' }))).toMatch(/hear song 7/)
   expect(w.store.get('fold:music')).toBe(true)
 
   await ui.press({ key: 'fold-music' })
   expect(await ui.find({ type: 'Text', text: '05 · 42/70 usable' })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: /1 for you/ })).toBeFalsy()
   expect(w.store.has('fold:music')).toBe(false)   // back to the default: nothing kept
   await ui.unmount()
 })
@@ -426,5 +425,115 @@ test('a conversation file that does not parse is named, and its last read still 
   expect(texts.some(t => /^skipped sessions\/b\.json: /.test(t))).toBe(true)
   expect(texts.some(t => /^skipped sessions\/a\.json: .*showing the last read/.test(t))).toBe(true)
   expect(texts.some(t => t.startsWith('console sessions'))).toBe(true)
+  await ui.unmount()
+})
+
+const ACTIONS = [
+  { label: 'play', open: '/v/ep04/final.mp4' },
+  { label: 'send back', fill: 'ep04 final goes back because: ' },
+]
+
+test('"for you" comes first: the asking conversations, then each pipeline\'s waiting items with their buttons', { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w } = world(on, {
+    'ai-video.json': status({ pipeline: 'ai-video', state: 'waiting', headline: '1 job at final', waiting: [{ id: 'f', text: 'check ep04', actions: ACTIONS }] }),
+    'music.json': status({}),
+  })
+  w.sessions['a.json'] = conversation({ id: 'a' })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    const texts = (await ui.findAll({ type: 'Text' })).map(t => textOf(t))
+    expect(texts.indexOf('for you')).toBeLessThan(texts.indexOf('conversations'))
+    const forYou = textOf(await ui.find({ key: 'card-for-you' }))
+    expect(forYou).toMatch(/2 waiting/)
+    expect(forYou).toMatch(/Open a PR\?/)
+    expect(forYou).toMatch(/check ep04/)
+    // the conversations card and the pipeline card only point at it
+    expect(textOf(await ui.find({ key: 'conversations' }))).not.toMatch(/Open a PR/)
+    expect(textOf(await ui.find({ key: 'card-ai-video' }))).not.toMatch(/check ep04/)
+    expect(textOf(await ui.find({ key: 'card-ai-video' }))).toMatch(/1 for you/)
+    expect((await ui.find({ key: 'act:ai-video:f:0' }))?.text).toBe('play')
+    expect((await ui.find({ key: 'act:ai-video:f:1' }))?.text).toBe('send back…')
+    await ui.unmount()
+  }
+})
+
+test('nothing waits: no "for you" card', { options: { status_dir: '/s' } }, async ($, on) => {
+  world(on, { 'music.json': status({}) })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ key: 'card-for-you' })).toBeFalsy()
+  await ui.unmount()
+})
+
+// The engine a button reaches: what a path leads to, the system's `open`, and the prompt box.
+function buttons(on: On, leadsTo: Record<string, { kind: 'file' | 'dir' | 'other'; realPath: string }>, draft = '') {
+  const b = { runs: [] as string[][], fills: [] as { text: string; mode?: string }[], exitCode: 0, refusal: undefined as undefined | 'dialog' }
+  on('fs.stat', (_, e) => {
+    const to = leadsTo[e.path]
+    if (!to) return { deny: 'ENOENT: no such file' }
+    return { value: { kind: to.kind, size: 1, mtimeMs: 0, isLink: to.realPath !== e.path, realPath: to.realPath } }
+  })
+  on('process.run', (_, e) => { b.runs.push([...e.argv]); return { value: { exitCode: b.exitCode, stdout: '', stderr: b.exitCode ? 'The file does not exist.' : '', isStdoutTruncated: false, isStderrTruncated: false } } })
+  on('prompt.read', () => ({ value: { text: draft, cursor: draft.length } }))
+  on('prompt.fill', (_, e) => {
+    if (b.refusal) return { isFilled: false, refusal: b.refusal }
+    b.fills.push({ text: e.text, mode: e.mode })
+    return { isFilled: true }
+  })
+  return b
+}
+
+const noteOf = async (ui: { find: (q: object) => Promise<unknown> }) => textOf(await ui.find({ key: 'card-for-you' }))
+
+test('a button opens a file with the system\'s own app, and says so', { options: { status_dir: '/s' } }, async ($, on) => {
+  world(on, { 'ai-video.json': status({ pipeline: 'ai-video', state: 'waiting', waiting: [{ id: 'f', text: 'check ep04', actions: ACTIONS }] }) })
+  const b = buttons(on, { '/v/ep04/final.mp4': { kind: 'file', realPath: '/v/ep04/final.mp4' } })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'act:ai-video:f:0' })
+  expect(b.runs).toEqual([['open', '/v/ep04/final.mp4']])
+  expect(await noteOf(ui)).toMatch(/opened final\.mp4/)
+  b.exitCode = 1
+  await ui.press({ key: 'act:ai-video:f:0' })
+  expect(await noteOf(ui)).toMatch(/can't open \/v\/ep04\/final\.mp4: The file does not exist\./)
+  await ui.unmount()
+})
+
+test('a path that leads to an app, or nowhere, is not opened', { options: { status_dir: '/s' } }, async ($, on) => {
+  world(on, { 'ai-video.json': status({ pipeline: 'ai-video', state: 'waiting', waiting: [
+    { id: 'f', text: 'check ep04', actions: [{ label: 'play', open: '/v/final.mp4' }] },
+    { id: 'g', text: 'check ep05', actions: [{ label: 'play', open: '/v/gone.mp4' }] },
+  ] }) })
+  const b = buttons(on, { '/v/final.mp4': { kind: 'dir', realPath: '/Applications/Calculator.app' } })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'act:ai-video:f:0' })
+  expect(await noteOf(ui)).toMatch(/won't open \/v\/final\.mp4/)
+  await ui.press({ key: 'act:ai-video:g:0' })
+  expect(await noteOf(ui)).toMatch(/can't open \/v\/gone\.mp4: .*ENOENT/)
+  expect(b.runs).toEqual([])
+  await ui.unmount()
+})
+
+for (const draft of ['', 'and also'])
+test(`a fill button starts a message in the prompt box (draft "${draft}")`, { options: { status_dir: '/s' } }, async ($, on) => {
+  world(on, { 'ai-video.json': status({ pipeline: 'ai-video', state: 'waiting', waiting: [{ id: 'f', text: 'check ep04', actions: ACTIONS }] }) })
+  const b = buttons(on, {}, draft)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'act:ai-video:f:1' })
+  // an empty box takes the words; words already typed are kept, the new ones go on a line after them
+  expect(b.fills).toEqual(draft ? [{ text: '\nep04 final goes back because: ', mode: 'append' }] : [{ text: 'ep04 final goes back because: ', mode: 'replace' }])
+  expect(await noteOf(ui)).toMatch(/in the prompt box: finish it and send/)
+  // a box that does not take it (a hook kept it out; the engine's own refusals say why) is said
+  b.refusal = 'dialog'
+  await ui.press({ key: 'act:ai-video:f:1' })
+  expect(await noteOf(ui)).toMatch(/the prompt box didn't take it/)
   await ui.unmount()
 })

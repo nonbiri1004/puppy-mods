@@ -1,6 +1,6 @@
 # the status file format
 
-every pipeline writes one small json file into one shared folder. the mod reads every `*.json` in that folder and draws one card per file. it reads the folder only while its pane is open (once on `/console`, then every minute). the mod never runs a pipeline and never writes into the folder. (it keeps its own conversation files elsewhere; see conversations, below.)
+every pipeline writes one small json file into one shared folder. the mod reads every `*.json` in that folder and draws one card per file. it reads the folder only while its pane is open (once on `/console`, then every minute). the mod never runs a pipeline and never writes into the folder; the most a button does is open a file to look at, or put words in the prompt box (see `actions`, below). (it keeps its own conversation files elsewhere; see conversations, below.)
 
 ```
 <status folder>/
@@ -22,7 +22,8 @@ every pipeline writes one small json file into one shared folder. the mod reads 
   "state": "running",
   "headline": "05_autumn · 42/70 usable",
   "progress": { "done": 42, "total": 70, "unit": "usable songs" },
-  "waiting": [{ "id": "listen-7", "text": "hear song 7", "since": "2026-10-24T21:10:00+08:00" }],
+  "waiting": [{ "id": "listen-7", "text": "hear song 7", "since": "2026-10-24T21:10:00+08:00",
+                "actions": [{ "label": "play", "open": "/Volumes/music/05_autumn/007.wav" }] }],
   "last_output": { "label": "song 88 ok", "at": "2026-10-24T22:38:12+08:00" },
   "next": "keep making songs",
   "detail": {}
@@ -41,10 +42,19 @@ every pipeline writes one small json file into one shared folder. the mod reads 
 | `state` | yes | `running` (working now), `idle` (nothing to do), `waiting` (stopped until you do something), `error` (stopped by a problem) |
 | `headline` | yes | one short line: what it is doing now |
 | `progress` | no | `{ done, total, unit }` for a progress bar; `total` can be `null` when there is no end |
-| `waiting` | no | things only you can do (listen, approve, drop a file in). `id` stays the same while the item waits, so a later to-do or button can point at it |
+| `waiting` | no | things only you can do (listen, approve, drop a file in). `id` stays the same while the item waits, so a later to-do or button can point at it. `since` is when it began to wait. `actions` gives it buttons, below |
 | `last_output` | no | the newest thing it made: `{ label, at, path? }` |
 | `next` | no | the next step, in words |
 | `detail` | no | anything the pipeline wants to show more of. the mod draws a few known ones (below); for others it shows nothing extra |
+
+## actions
+
+an item in `waiting` can carry up to three buttons, `actions: [{ label, open | fill }]`, drawn under it in the pane's **for you** card. `label` is the button's word, at most 24 characters. each action has exactly one of:
+
+- `open`: a full path (or `~/…`) the pane opens with the computer's own app (macOS `open`) when you press it. it has to be a picture, a video, a sound or a pdf (`.mp4 .mov .m4v .webm .mkv .mp3 .wav .m4a .aac .flac .ogg .png .jpg .jpeg .gif .webp .pdf`), or a folder written with a `/` at the end. the folder can be synced, so the pane never opens anything that runs: no app or other bundle anywhere in the path, no `..`, and the same check again on where the path really leads (links resolved) when you press. a path that is not on this computer says so in the pane.
+- `fill`: at most 500 characters the pane puts in the prompt box of the conversation the pane is in, after anything already typed there. it sends nothing: you finish the words and press enter. write it so claude knows what to do without the card, for example `"in ai-video-pipeline, send baibai/ep04 back to compose because: "`.
+
+an action that breaks a rule is left out, like any field of the wrong type; the item still shows.
 
 ## writing it
 
