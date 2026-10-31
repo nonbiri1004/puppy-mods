@@ -1,19 +1,21 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, FsEntry, Register } from 'claude-code'
 
-import type { Skill, View, Where } from '../types'
+import type { Mod, Skill, View, Where } from '../types'
 import { stillBlocks, typingPuppy } from './draw'
-import { bodyOf, cardsOf, cut, firstSentence, parseSkill, usesOf, whenOf } from './skills'
+import { bodyOf, cardsOf, cut, firstSentence, modsOf, parseSkill, usesOf, whenOf } from './skills'
 import type { Card, Task } from './skills'
 
 const PANE = 'puppy-skills'
+// /my-kit since it lists mods too; /my-skills, its old name, still opens it (/skills is the app's own)
+const OLD_COMMAND = 'my-skills'
 const PUPPY_MIN_ROWS = 26
 // the block frame is 34 columns; narrower, each row wraps and breaks the drawing
 const PUPPY_COLUMNS = 34
 // how long a first sentence may run (Latin columns; a CJK character is two) where rows wrap
 const SENTENCE = 110
 
-const EMPTY: View = { skills: [], openIds: [], isShowingSynced: false, at: null, notes: [] }
+const EMPTY: View = { skills: [], mods: [], openIds: [], isShowingSynced: false, at: null, notes: [] }
 const view = atom({ plugin: 'puppy-skills', key: 'view' } as const, EMPTY)
 
 // how deep under ~/dev a repo's .claude folder may be (~/dev/Projects/<owner>/<repo>/.claude is 4)
@@ -138,7 +140,7 @@ async function scheduledTasks($: EngineInterface, home: string): Promise<Task[]>
   return got.filter(t => t !== null)
 }
 
-// looks again: when the pane opens and on refresh. it only reads files; no skill is run
+// looks again: when the pane opens and on refresh. it only reads files and the command list; nothing is run
 let loads = 0
 
 async function load($: EngineInterface): Promise<void> {
@@ -152,7 +154,7 @@ async function load($: EngineInterface): Promise<void> {
       return []
     })
 
-  const [personal, repos, plugins, tasks] = await Promise.all([
+  const [personal, repos, plugins, tasks, commands] = await Promise.all([
     tried('~/.claude/skills', findSkillFiles($, `${home}/.claude/skills`, 3).then(fs =>
         // skills/synced/ is what the app copies from claude.ai: Anthropic's, not ones you wrote
         fs.map(f => toSkill(f, f.dir.includes('/.claude/skills/synced/') ? 'synced' : 'personal', '')),
@@ -165,6 +167,7 @@ async function load($: EngineInterface): Promise<void> {
     ),
     tried('plugins', pluginSkills($, home)),
     tried('scheduled tasks', scheduledTasks($, home)),
+    tried('commands', $.command.list()),
   ])
   const seen = new Set<string>()
   const skills: Skill[] = []
@@ -175,11 +178,19 @@ async function load($: EngineInterface): Promise<void> {
       skills.push({ ...s, uses: usesOf(tasks, s) })
     }
   }
+  const mods = modsOf(commands, new Set(skills.map(s => s.name)), [OLD_COMMAND])
   const at = await $.clock.now()
   if (mine !== loads) {
     return
   }
-  await update($, view, was => ({ ...EMPTY, ...was, skills, at, notes }))
+  await update($, view, was => ({ ...EMPTY, ...was, skills, mods, at, notes }))
+}
+
+async function openKit($: EngineInterface): Promise<{ text: string }> {
+  await $.ui.open({ id: PANE, title: 'kit' })
+  await load($)
+
+  return { text: 'your kit is open.' }
 }
 
 function clock(at: number): string {
@@ -189,19 +200,15 @@ function clock(at: number): string {
 }
 
 export const register: Register = on => {
-  // /skills is the app's own; this one is /my-skills
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'my-skills', description: 'see which skills you have and where each one works' })
+    await $.command.register({ name: 'my-kit', description: 'see which skills and mods you have and where each one works' })
+    await $.command.register({ name: OLD_COMMAND, description: 'the old name of /my-kit' })
 
     return next(e)
   })
 
-  on('command.run', { command: 'my-skills' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'skills' })
-    await load($)
-
-    return { text: 'your skills are open.' }
-  })
+  on('command.run', { command: 'my-kit' }, openKit)
+  on('command.run', { command: 'my-skills' }, openKit)
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const ui = $.ui.resolve(e)
@@ -221,56 +228,64 @@ export const register: Register = on => {
         openIds: was.openIds.includes(id) ? was.openIds.filter(i => i !== id) : [...was.openIds, id],
       }))
 
-    // your own skills (yours, a repo's, a plugin's) are cards; anthropic's from claude.ai stay folded below
+    // your own skills (yours, a repo's, a plugin's) are cards, then the mods' commands;
+    // anthropic's skills from claude.ai stay folded below
     const mine = v.skills.filter(s => s.where !== 'synced')
     const synced = v.skills.filter(s => s.where === 'synced')
-    const drawCard = (card: Card) => (
-      <Box key={card.key} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
+    // one row: ▸, the name and its first sentence, a fact on the right; unfolded, the whole description and more lines
+    const drawRow = (id: string, name: string, description: string, right: string, more: string[]) => {
+      const isOpen = v.openIds.includes(id)
+
+      return (
+        <Box key={`s-${id}`} flexDirection="column">
+          <Box flexDirection="row" alignItems="flex-start" gap={1}>
+            <Box width={3} flexShrink={0}>
+              <Button key={`open-${id}`} label={isOpen ? '▾' : '▸'} plain dimColor onPress={() => toggle(id)} />
+            </Box>
+            <Box flexGrow={1} flexShrink={1} minWidth={0}>
+              <Text>
+                {name}
+                <Text dimColor> {cut(firstSentence(description), Math.max(8, cols - name.length - 5 - right.length))}</Text>
+              </Text>
+            </Box>
+            {right ? (
+              <Box flexShrink={0}>
+                <Text dimColor>{right}</Text>
+              </Box>
+            ) : null}
+          </Box>
+          {isOpen ? (
+            <Box flexDirection="column" paddingLeft={4}>
+              <Text dimColor>{description || 'no description.'}</Text>
+              {more.map(line => (
+                <Text key={`more-${id}-${line}`} dimColor>
+                  {line}
+                </Text>
+              ))}
+            </Box>
+          ) : null}
+        </Box>
+      )
+    }
+    const drawCard = (key: string, title: string, scope: string, rows: JSX.Element[]) => (
+      <Box key={key} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
         <Box flexDirection="row" justifyContent="space-between" gap={1}>
-          <Text weight="semibold">{card.title}</Text>
+          <Text weight="semibold">{title}</Text>
           <Text dimColor>
-            {card.scope} · {card.skills.length}
+            {scope} · {rows.length}
           </Text>
         </Box>
-        {card.skills.map(s => {
-          const isOpen = v.openIds.includes(s.id)
-          const time = s.uses.map(u => u.when).find(w => w !== '') ?? ''
-          const right = s.uses.length > 0 ? `⏰${time ? ` ${time.split(' ')[0]}` : ''}` : ''
-
-          return (
-            <Box key={`s-${s.id}`} flexDirection="column">
-              <Box flexDirection="row" alignItems="flex-start" gap={1}>
-                <Box width={3} flexShrink={0}>
-                  <Button key={`open-${s.id}`} label={isOpen ? '▾' : '▸'} plain dimColor onPress={() => toggle(s.id)} />
-                </Box>
-                <Box flexGrow={1} flexShrink={1} minWidth={0}>
-                  <Text>
-                    {s.name}
-                    <Text dimColor> {cut(firstSentence(s.description), Math.max(8, cols - s.name.length - 5 - right.length))}</Text>
-                  </Text>
-                </Box>
-                {right ? (
-                  <Box flexShrink={0}>
-                    <Text dimColor>{right}</Text>
-                  </Box>
-                ) : null}
-              </Box>
-              {isOpen ? (
-                <Box flexDirection="column" paddingLeft={4}>
-                  <Text dimColor>{s.description || 'no description.'}</Text>
-                  {s.uses.map(u => (
-                    <Text key={`use-${s.id}-${u.task}`} dimColor>
-                      ⏰ {u.task}
-                      {u.when ? ` · ${u.when}` : ''}
-                    </Text>
-                  ))}
-                </Box>
-              ) : null}
-            </Box>
-          )
-        })}
+        {rows}
       </Box>
     )
+    const drawSkill = (s: Skill) => {
+      const time = s.uses.map(u => u.when).find(w => w !== '') ?? ''
+      const right = s.uses.length > 0 ? `⏰${time ? ` ${time.split(' ')[0]}` : ''}` : ''
+
+      return drawRow(s.id, s.name, s.description, right, s.uses.map(u => `⏰ ${u.task}${u.when ? ` · ${u.when}` : ''}`))
+    }
+    const drawSkillCard = (card: Card) => drawCard(card.key, card.title, card.scope, card.skills.map(drawSkill))
+    const drawMod = (m: Mod) => drawRow(m.id, `/${m.name}`, m.description, '', m.plugin ? [`from ${m.plugin}`] : [])
 
     return (
       <Box flexDirection="column" gap={1}>
@@ -290,13 +305,14 @@ export const register: Register = on => {
               <ui.Svg source={typingPuppy()} alt="the puppy typing at its laptop" width={68} height={52} isInteractive />
             ) : null}
             <Text dimColor>
-              {mine.length} skills · looked {clock(v.at)}
+              {mine.length} skills{v.mods.length > 0 ? ` · ${v.mods.length} mods` : ''} · looked {clock(v.at)}
             </Text>
           </Box>
           <Button key="refresh" label="refresh" dimColor onPress={() => load($)} />
         </Box>
 
-        {cardsOf(mine).map(drawCard)}
+        {cardsOf(mine).map(drawSkillCard)}
+        {v.mods.length > 0 ? drawCard('card-mods', 'mods', 'where the mod is on', v.mods.map(drawMod)) : null}
 
         {synced.length > 0 && (
           <Box flexDirection="column" gap="xs">
@@ -306,7 +322,7 @@ export const register: Register = on => {
               dimColor
               onPress={() => update($, view, was => ({ ...EMPTY, ...was, isShowingSynced: !was.isShowingSynced }))}
             />
-            {v.isShowingSynced ? cardsOf(synced).map(drawCard) : null}
+            {v.isShowingSynced ? cardsOf(synced).map(drawSkillCard) : null}
           </Box>
         )}
 

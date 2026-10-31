@@ -1,8 +1,6 @@
 // where a skill can be used: personal ones everywhere, a repo's only in a conversation opened in
 // that repo, a plugin's wherever the plugin is turned on. synced: Anthropic's skills the app copies
 // from your claude.ai account into ~/.claude/skills/synced/ (usable everywhere, but not yours)
-//
-// that repo, a plugin's wherever the plugin is turned on
 export type Where = 'personal' | 'repo' | 'plugin' | 'synced'
 
 // one scheduled task whose prompt names the skill
@@ -26,8 +24,20 @@ export type Skill = {
   uses: Use[]
 }
 
+// a slash command a mod adds in code ($.command.register), not a SKILL.md: /console, /todo
+export type Mod = {
+  // mod:<plugin>:<name>, unique in the list
+  id: string
+  // what you type, without the slash
+  name: string
+  description: string
+  // the plugin that added it, without @<marketplace>; empty when the app does not say
+  plugin: string
+}
+
 export type View = {
   skills: Skill[]
+  mods: Mod[]
   // the ids unfolded to their whole description
   openIds: string[]
   // the claude.ai skills are unfolded below the cards

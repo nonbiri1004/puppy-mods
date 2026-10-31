@@ -1,4 +1,6 @@
-import type { Skill, Use, Where } from '../types'
+import type { CommandInfo } from 'claude-code'
+
+import type { Mod, Skill, Use, Where } from '../types'
 
 // name and description from a SKILL.md's frontmatter; null when it has no name
 export function parseSkill(text: string): { name: string; description: string } | null {
@@ -138,4 +140,17 @@ export function cardsOf(skills: Skill[]): Card[] {
   }
 
   return [...cards.values()]
+}
+
+// the commands a mod adds in code: from a plugin, a bare name (a plugin's own skill or markdown
+// command reads <plugin>:<name>), and not a skill found on disk. `hidden` are left out (an alias)
+export function modsOf(commands: CommandInfo[], skillNames: Set<string>, hidden: string[] = []): Mod[] {
+  return commands
+    .filter(c => c.source === 'plugin' && !c.name.includes(':') && !skillNames.has(c.name) && !hidden.includes(c.name))
+    .map(c => {
+      const plugin = c.plugin?.split('@')[0] ?? ''
+
+      return { id: `mod:${plugin}:${c.name}`, name: c.name, description: c.description, plugin }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
 }

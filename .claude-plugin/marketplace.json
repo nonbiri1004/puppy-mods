@@ -21,7 +21,7 @@
     {
       "name": "puppy-skills",
       "source": "./puppy-skills",
-      "description": "a pane listing your skills, where each one works, and which ones a schedule uses"
+      "description": "a pane listing your skills and mods, where each one works, and which skills a schedule uses"
     }
   ]
 }

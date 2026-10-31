@@ -14,7 +14,7 @@ each one does one useful thing and stays out of the way. they're free and open; 
 | --- | --- |
 | [puppy-todo](puppy-todo) | your own to-do list in a pane beside the chat: add, tick, delete. nothing else writes to it |
 | [puppy-console](puppy-console) | a pane with your conversations first (which ones wait for you, and what they ask), then one card per production pipeline (music, videos, …). each pipeline writes a small status file ([format](puppy-console/FORMAT.md)) |
-| [puppy-skills](puppy-skills) | `/my-skills`: a pane with the skills you have, grouped by where they work (everywhere, one repo, a plugin), with a ⏰ on the ones a scheduled task uses |
+| [puppy-skills](puppy-skills) | `/my-kit`: a pane with the skills you have, grouped by where they work (everywhere, one repo, a plugin), with a ⏰ on the ones a scheduled task uses, then the slash commands your mods add (`/console`, `/todo`) |
 
 they all look the same way: quiet cards, warm greys, lowercase words. the rules are in [STYLE.md](STYLE.md).
 

@@ -11,7 +11,7 @@ const PANE = {
   component: 'Pane',
   requestId: 'puppy-skills',
   props: {
-    title: 'skills',
+    title: 'kit',
     isFocused: false,
     bodyColumns: 80,
     placement: 'dock',
@@ -44,6 +44,7 @@ const VIEW: View = {
       uses: [{ task: 'morning dig', when: '9:00 daily' }],
     },
   ],
+  mods: [],
   openIds: [],
   isShowingSynced: false,
   at: Date.parse('2026-10-27T10:00:00Z'),
@@ -143,4 +144,43 @@ test('loading is plain text on every surface', async ($, on) => {
     expect((await ui.findAll({ type: 'Text' })).map(t => t.text)).toEqual(['loading…'])
     await ui.unmount()
   }
+})
+
+const MODS: View['mods'] = [
+  { id: 'mod:puppy-console:console', name: 'console', description: 'Open the console: your conversations, then the pipelines', plugin: 'puppy-console' },
+  { id: 'mod:puppy-todo:todo', name: 'todo', description: 'your own to-do list. nothing else writes to it', plugin: 'puppy-todo' },
+]
+
+test('mods: one card after the skills, a row per command, counted in the first row', async ($, on) => {
+  on('state.get', () => ({ value: { value: { ...VIEW, mods: MODS, openIds: ['mod:puppy-todo:todo'] }, version: 1 } }))
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect((await ui.find({ type: 'Text', text: /2 skills · 2 mods · looked/ }))?.text).toBeTruthy()
+    expect(await ui.find({ type: 'Box', key: 'card-mods' })).toBeTruthy()
+    expect((await ui.find({ type: 'Text', text: /where the mod is on · 2/ }))?.text).toBeTruthy()
+    const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+    expect(texts.some(t => t.startsWith('/console Open the console'))).toBe(true)
+    // unfolded: the whole description and where it comes from
+    expect(texts).toContain('from puppy-todo')
+    expect(texts).not.toContain('from puppy-console')
+    // after the skills' cards
+    expect(texts.findIndex(t => t.startsWith('/console'))).toBeGreaterThan(texts.findIndex(t => t.startsWith('dig-hole')))
+    await ui.unmount()
+  }
+})
+
+test('no mods: no card, and the first row says only skills', async ($, on) => {
+  on('state.get', () => ({ value: { value: VIEW, version: 1 } }))
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Box', key: 'card-mods' })).toBeFalsy()
+  expect((await ui.find({ type: 'Text', text: /mods/ }))).toBeFalsy()
+  await ui.unmount()
+})
+
+test('a view stored before mods existed still draws', async ($, on) => {
+  const { mods: _, ...old } = VIEW
+  on('state.get', () => ({ value: { value: old as View, version: 1 } }))
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /2 skills · looked/ }))?.text).toBeTruthy()
+  await ui.unmount()
 })
