@@ -28,6 +28,15 @@ test('the name is the first thing the person typed, without the app\'s tags', ()
   expect(nameOf([user(summary)])).toBe('new conversation')
 })
 
+test('an attached file names a conversation by its file name, never its path', () => {
+  const attached = '@"/Users/me/Library/Messages/Attachments/b9/09/1EBA/平假名配圖總表_A4.pdf"\n\n<pasted_content id="33be">\nそれなら…\n</pasted_content>'
+  expect(nameOf([user(attached)])).toBe('平假名配圖總表_A4.pdf')
+  expect(nameOf([user('@"/Users/me/dev/app/SPEC.md" 這跟 spec 有什麼不同')])).toBe('SPEC.md 這跟 spec 有什麼不同')
+  expect(nameOf([user('看一下 @src/app.ts 和 @docs/a.md')])).toBe('看一下 app.ts 和 a.md')
+  // an @ inside a link is not a file
+  expect(nameOf([user('https://www.threads.com/@mason/post/1 這類')])).toBe('https://www.threads.com/@mason/post/1 這類')
+})
+
 test('a reply line loses its markdown marks', () => {
   expect(plainLine('## Done\nmore', 200)).toBe('Done')
   expect(plainLine('**Card added** to `register.tsx`', 200)).toBe('Card added to register.tsx')
@@ -65,6 +74,15 @@ test('waiting first, newest first; old ones leave; a forgotten "running" is done
   // a question waits two weeks; anything else leaves after three days; a fork never shows
   expect(recent(list, T).map(c => c.id)).toEqual(['w-new', 'w-old', 'w-long', 'run', 'done'])
   expect(shownState(parseConversation(conv({ state: 'running', updated: at(RUNNING_MS + 1) })), T)).toBe('done')
+
+  // a side chat the app named, from a file written before side chats were marked, never shows;
+  // a person who types "btw:" themselves is not one
+  const sides = [
+    parseConversation(conv({ id: 'btw', title: 'btw: 這是什麼', isAppTitle: true })),
+    parseConversation(conv({ id: 'side', title: 'Side chat', isAppTitle: true })),
+    parseConversation(conv({ id: 'typed', title: 'btw: 我自己打的' })),
+  ]
+  expect(recent(sides, T).map(c => c.id)).toEqual(['typed'])
   expect(shownState(parseConversation(conv({ state: 'running', updated: at(RUNNING_MS - 1) })), T)).toBe('running')
 })
 

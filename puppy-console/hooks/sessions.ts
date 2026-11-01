@@ -53,11 +53,28 @@ export function plainLine(text: string, max: number): string {
   return oneLine(bare, max)
 }
 
+// An attached file is typed as @"<path>" (or @<path>); the name keeps the file's own name, not
+// its path. An @ inside a link (threads.com/@name) is not one.
+const MENTION = /(^|\s)@(?:"([^"]+)"|(\S*\/\S+))/g
+
+// A prompt as a name: one line, without the app's tags or the attached files' paths. Empty for
+// an opener the app wrote in the person's place.
+export function promptName(text: string): string {
+  const typed = plain(text)
+  if (!typed || NOT_TYPED.some(re => re.test(typed))) return ''
+  return oneLine(typed.replace(MENTION, (_, before: string, quoted?: string, bare?: string) => `${before}${folderName(quoted ?? bare ?? '')}`), 60)
+}
+
 // The conversation's name when the app has given it none yet: the first thing the person typed.
 export function nameOf(messages: Message[]): string {
   const first = messages.find(isPrompt)
-  return first ? oneLine(plain(first.text), 60) : 'new conversation'
+  return (first && promptName(first.text)) || 'new conversation'
 }
+
+// The desktop app's side chats (btw). It starts one on a copy of the other conversation's
+// messages, not always as a fork, and names it "Side chat", then "btw: <the question>": that
+// name is what tells it. Only the app's own title counts; a person may type "btw:" themselves.
+export const isSideChatTitle = (title: string) => /^(side chat$|btw:\s)/i.test(title.trim())
 
 // The desktop app's wrap_up tool: its recap says what is now true, its ask what waits on you.
 export const isWrapUp = (tool: string) => /(^|__)wrap_up$/.test(tool)
@@ -97,13 +114,15 @@ export function shownState(c: Conversation, now: number): ConversationState {
 
 const keepFor = (c: Conversation, now: number) => (shownState(c, now) === 'waiting' ? KEEP_WAITING_MS : KEEP_MS)
 
-// The ones the card shows: the last few days (two weeks for one that waits for you), forks left
-// out (a side question's answer is back in the conversation it came from); waiting first, then
-// errors, running, done; newest first.
+// The ones the card shows: the last few days (two weeks for one that waits for you), forks and
+// side chats left out (a side question's answer is back in the conversation it came from), also
+// from a file written before side chats were marked; waiting first, then errors, running, done;
+// newest first.
 const ORDER: Record<ConversationState, number> = { waiting: 0, error: 1, running: 2, done: 3 }
+const isSide = (c: Conversation) => c.isFork || (c.isAppTitle && isSideChatTitle(c.title))
 export function recent(list: Conversation[], now: number): Conversation[] {
   return list
-    .filter(c => !c.isFork && now - Date.parse(c.updated) <= keepFor(c, now))
+    .filter(c => !isSide(c) && now - Date.parse(c.updated) <= keepFor(c, now))
     .sort((a, b) => ORDER[shownState(a, now)] - ORDER[shownState(b, now)] || Date.parse(b.updated) - Date.parse(a.updated))
 }
 
