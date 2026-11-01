@@ -82,13 +82,14 @@ when a pipeline has several items of one kind (three finals to review), it can n
 
 the mod draws these when `pipeline` matches; anything else in `detail` is ignored.
 
-- `music`: `{ comfy: { up, running, pending }, generating, batches: [{ name, strip, est_usable, target_usable, generated, ok, needs_listen, rejected, errors, avg_gen_sec, status_tail }] }`. `strip` has one letter per song: `o` ok, `l` to hear, `r` rejected, `x` left out, `e` failed, `?` being checked.
-- `ai-video`: `{ spend_usd, cap_usd, jobs: [{ job, stage, spend_usd, cap_usd, updated, next }] }`. `stage` is `plan`, `clips`, `voice`, `compose`, `final` or `done`; the card groups jobs by stage.
+- `music`: `{ comfy: { up, running, pending }, generating, batches: [{ name, strip, est_usable, target_usable, generated, ok, needs_listen, rejected, errors, avg_gen_sec, status_tail }] }`. `strip` has one letter per song: `o` ok, `l` to hear, `r` rejected, `x` left out, `e` failed, `?` being checked. the card shows the first batch: its name, then made · ok · to hear · rejected (and failed, and the minutes per song); the squares are in its details.
+- `ai-video`: `{ spend_usd, cap_usd, jobs: [{ job, stage, spend_usd, cap_usd, updated, next }] }`. `stage` is `plan`, `clips`, `voice`, `compose`, `final` or `done`; the card counts the jobs at every stage in one row, then the spend, and names them by stage in its details.
 - `collector-*` (info-collector, one file per profile, e.g. `collector-tech-news`; matched by the prefix): `{ counts: { collected, new, scored, sent, unsent, pending }, errors: [text] }`.
   - `collected`, `new`, `scored` and `sent` are this run. `scored` can be more than `new` (older unscored items are scored too), and `sent` can be more than `scored` (earlier runs' picks).
   - `unsent`: high-scored items not in notion yet (sent next run, or refused).
   - `pending`: items waiting for your review in notion now, from every run. at most 100 (`100` means 100 or more); `null` when notion could not be read.
-  - without `counts` (older files) the card draws no picture and no extra lines.
+  - the card shows this run's four counts side by side, then `pending` and `unsent`.
+  - without `counts` (older files) the card shows only `progress`, if the file has one.
 
 ## conversations
 

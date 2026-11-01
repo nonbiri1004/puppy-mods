@@ -114,6 +114,10 @@ declare module 'claude-code' {
       isShowingOlderNeeds: boolean
       // the waiting groups opened in "for you", by "<pipeline>:<group id>"
       openGroups: Record<string, boolean>
+      // the cards whose "▸ details" is open, by pipeline
+      openDetails: Record<string, boolean>
+      // the lists whose "▸ N more" is open: "needs", "running", "done", or a pipeline's waiting items
+      openMore: Record<string, boolean>
       // this conversation's last write of its own file failed, and why
       writeError: string | null
       // what the last press of a waiting item's button did, or why it could not
