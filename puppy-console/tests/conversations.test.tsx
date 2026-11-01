@@ -95,7 +95,7 @@ const PANE = {
 
 const entry = (name: string, kind: 'file' | 'dir' = 'file') => ({ name, kind, size: 1, mtimeMs: 0, isLink: false })
 
-test('the conversations card comes first, with what each one asks', { options: { status_dir: '/s' } }, async ($, on) => {
+test('the asking conversations come first, in "for you", with what each one asks', { options: { status_dir: '/s' } }, async ($, on) => {
   const files: Record<string, string> = {
     '/home/me/.claude/console/sessions/a.json': conv({ id: 'a', state: 'waiting', isAppTitle: true, title: 'console sessions', recap: 'Card added.', ask: 'Open a PR?' }),
     '/home/me/.claude/console/sessions/b.json': conv({ id: 'b', state: 'done', title: 'fix the bowl' }),
@@ -123,7 +123,8 @@ test('the conversations card comes first, with what each one asks', { options: {
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
-    expect(texts.indexOf('conversations')).toBeLessThan(texts.indexOf('music'))
+    expect(texts.indexOf('conversations · 1')).toBeGreaterThan(-1)
+    expect(texts.indexOf('conversations · 1')).toBeLessThan(texts.indexOf('music'))
     // one waits for you: the puppy sits (a picture on the desktop, its face on the terminal)
     if (surface === 'desktop') expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('the puppy sitting')
     else expect(texts.some(t => /ᴥ/.test(t ?? ''))).toBe(false)
@@ -222,7 +223,7 @@ test('conversations off: nothing is written and no card is drawn', { options: { 
   expect(lists.some(p => p.includes('.claude/console'))).toBe(false)
 })
 
-test('with no status folder set, the conversations card still comes before the error', async ($, on) => {
+test('with no status folder set, the running conversation still shows, below the error', async ($, on) => {
   mock.env(on, { HOME: '/home/me' })
   mock.clock(on, { now: T + 60_000 })
   on('fs.list', (_, e) => ({ value: (e as { path: string }).path.endsWith('sessions') ? [entry('a.json')] : [] }))
@@ -234,7 +235,9 @@ test('with no status folder set, the conversations card still comes before the e
   expect((await $.command.run({ command: 'console', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })).text).toBe('console opened.')
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text ?? '')
-  expect(texts.indexOf('conversations')).toBeLessThan(texts.findIndex(t => /no status folder set/.test(t)))
+  const running = texts.findIndex(t => /^· busy one/.test(t))
+  expect(running).toBeGreaterThan(texts.findIndex(t => /no status folder set/.test(t)))
+  expect(texts.findIndex(t => /no status folder set/.test(t))).toBeGreaterThan(-1)
   expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('the puppy typing at its laptop')
   await ui.unmount()
 })

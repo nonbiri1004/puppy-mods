@@ -1,6 +1,6 @@
-// The picture under each card, as an SVG string: a progress bar for any pipeline, and a richer
-// picture for the details this mod knows (music, ai-video, collector-*). Warm greys, light by day and dark by
-// night, low contrast. The puppy is the bare one (no headphones): a coding tool.
+// The picture in a card's "▸ details", as an SVG string, for the details this mod knows (music,
+// ai-video); the summary above it is text, from view.ts. Warm greys, light by day and dark by night,
+// low contrast. The puppy is the bare one (no headphones): a coding tool.
 import type { CollectorCounts, CollectorDetail, MusicDetail, Stage, Status, VideoDetail, VideoJob } from '../types'
 import { sit, sitBlink, sleep0, sleep1, typing0, typing1, typing2, typing3, typing4, typing5 } from './puppy'
 import { sit as blockSit, sleep0 as blockSleep0, typing0 as blockTyping0 } from './puppy-blocks'
@@ -42,25 +42,7 @@ const STYLE = `<style>
 const svg = (h: number, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}">${STYLE}${body}</svg>`
 
-function bar(x: number, y: number, w: number, part: number, fill = 'var(--ok)') {
-  const f = Math.max(0, Math.min(1, part)) * w
-  return `<rect x="${x}" y="${y}" width="${w}" height="4" rx="2" fill="var(--line)"/>` +
-    `<rect x="${x}" y="${y}" width="${f.toFixed(1)}" height="4" rx="2" fill="${fill}"/>`
-}
-
 export type Picture = { source: string; height: number; alt: string }
-
-function progressPicture(s: Status): Picture | null {
-  const p = s.progress
-  if (!p || !p.total) return null
-  const label = `${p.done}/${p.total}${p.unit ? ` ${p.unit}` : ''}`
-  return {
-    height: 24,
-    alt: label,
-    source: svg(24, bar(0, 10, W - 150, p.done / p.total) +
-      `<text class="m px" x="${W}" y="16" font-size="11" text-anchor="end">${esc(cut(label, 22))}</text>`),
-  }
-}
 
 // Two frames swapped by SMIL: the puppy blinks while it works and breathes while it sleeps.
 function puppy(x: number, y: number, scale: number, isWorking: boolean) {
@@ -95,7 +77,7 @@ function musicPicture(s: Status, isStale: boolean): Picture | null {
   const isWorking = s.state === 'running' && !isStale
   let body = puppy(0, H - 26 * 2.6 - 18, 2.6, isWorking)
   if (isWorking) body += notes(70, 40)
-  // the host is already in the card's header; the picture keeps to the studio itself
+  // the host is in the details beside the picture; the picture keeps to the studio itself
   const comfy = d.comfy ? (d.comfy.up ? 'comfy up' : 'comfy down') : ''
 
   // 30 squares per row; they shrink so a batch of 220 songs still fits. Past MAX_SQUARES only the
@@ -119,9 +101,8 @@ function musicPicture(s: Status, isStale: boolean): Picture | null {
     body += `<rect x="${x0 + i * 78}" y="${H - 12}" width="8" height="8" rx="1" fill="${fill}"/>` +
       `<text class="m" x="${x0 + 12 + i * 78}" y="${H - 4}" font-size="12">${name}</text>`
   })
-  const pace = b.avg_gen_sec ? `${Math.round(b.avg_gen_sec / 60)} min / song` : ''
-  const right = [comfy, pace].filter(Boolean).join(' · ')
-  if (right) body += `<text class="m px" x="${W}" y="${H - 4}" font-size="12" text-anchor="end">${esc(right)}</text>`
+  // the pace is in the summary above the picture
+  if (comfy) body += `<text class="m px" x="${W}" y="${H - 4}" font-size="12" text-anchor="end">${comfy}</text>`
   return {
     height: H,
     alt: `${b.name}: ${b.ok ?? 0} ok, ${b.needs_listen ?? 0} to hear, ${b.rejected ?? 0} rejected`,
@@ -131,7 +112,7 @@ function musicPicture(s: Status, isStale: boolean): Picture | null {
 
 export const STAGES: readonly Stage[] = ['plan', 'clips', 'voice', 'compose', 'final', 'done']
 // The two review gates only you can pass.
-const GATE: ReadonlySet<Stage> = new Set(['plan', 'final'])
+export const GATE: ReadonlySet<Stage> = new Set(['plan', 'final'])
 
 // A stage outside the list (a newer writer's) gets no column: unknownStages names those jobs.
 export function byStage(jobs: VideoJob[]): Record<Stage, VideoJob[]> {
@@ -140,7 +121,7 @@ export function byStage(jobs: VideoJob[]): Record<Stage, VideoJob[]> {
   return out
 }
 
-const jobName = (j: VideoJob) => j.job.split('/').pop() ?? j.job
+export const jobName = (j: VideoJob) => j.job.split('/').pop() ?? j.job
 
 // "deliver: 電車" for each job whose stage has no column; empty when there are none.
 // A job of an odd shape (not an object, no name) is skipped.
@@ -154,7 +135,8 @@ export function unknownStages(s: Status): string[] {
     .map(j => `${String(j.stage)}: ${jobName(j)}`)
 }
 
-// One column per stage, a chip per job; the review gates have a dashed outline.
+// One column per stage, a chip per job; the review gates have a dashed outline. The spend is in the
+// summary above the picture.
 function videoPicture(s: Status): Picture | null {
   const d = (s.detail ?? {}) as VideoDetail
   const jobs = d.jobs ?? []
@@ -162,31 +144,20 @@ function videoPicture(s: Status): Picture | null {
   const lanes = byStage(jobs)
   const colW = W / STAGES.length
   const shown = 4
-  const H = 36 + shown * 20 + 30
+  const H = 36 + shown * 20 + 6
   let body = ''
   STAGES.forEach((st, i) => {
     const x = i * colW
-    body += `<rect x="${x + 2}" y="0.5" width="${colW - 4}" height="${H - 31}" rx="6" fill="var(--card)" stroke="var(--line)"${GATE.has(st) ? ' stroke-dasharray="4 3"' : ''}/>`
+    body += `<rect x="${x + 2}" y="0.5" width="${colW - 4}" height="${H - 1}" rx="6" fill="var(--card)" stroke="var(--line)"${GATE.has(st) ? ' stroke-dasharray="4 3"' : ''}/>`
     body += `<text class="m px" x="${x + 10}" y="16" font-size="11">${st.toUpperCase()}${GATE.has(st) ? ' · YOU' : ''}</text>`
     const list = lanes[st]
     list.slice(0, shown).forEach((j, k) => {
-      const name = j.job.split('/').pop() ?? j.job
-      body += `<text class="${st === 'done' ? 'm' : 't'}" x="${x + 10}" y="${38 + k * 20}" font-size="14">${esc(cut(name, 12))}</text>`
+      body += `<text class="${st === 'done' ? 'm' : 't'}" x="${x + 10}" y="${38 + k * 20}" font-size="14">${esc(cut(jobName(j), 12))}</text>`
     })
     if (list.length > shown) body += `<text class="m" x="${x + 10}" y="${38 + shown * 20}" font-size="12">+${list.length - shown} more</text>`
   })
-  const spend = d.spend_usd ?? 0
-  const cap = d.cap_usd ?? 0
-  if (cap > 0) {
-    body += bar(0, H - 14, W - 190, spend / cap, spend / cap > 0.8 ? 'var(--reject)' : 'var(--ok)')
-    body += `<text class="m px" x="${W}" y="${H - 8}" font-size="13" text-anchor="end">spent $${spend.toFixed(2)} of $${cap.toFixed(2)}</text>`
-  }
   const waiting = jobs.filter(j => GATE.has(j.stage)).length
-  return {
-    height: H,
-    alt: `${jobs.length} jobs, ${waiting} at a review gate; spent $${spend.toFixed(2)} of $${cap.toFixed(2)}`,
-    source: svg(H, body),
-  }
+  return { height: H, alt: `${jobs.length} jobs, ${waiting} at a review gate`, source: svg(H, body) }
 }
 
 // info-collector writes one file per profile: collector-tech-news.json, collector-jobs.json, …
@@ -207,86 +178,10 @@ export function collectorCounts(s: Status): CollectorCounts | null {
   return { collected, new: count(c.new) ?? 0, scored: count(c.scored) ?? 0, sent: count(c.sent) ?? 0, unsent: count(c.unsent) ?? 0, pending: count(c.pending) }
 }
 
-const toReview = (p: number | null) => (p == null ? '?' : p >= PENDING_CAP ? `${PENDING_CAP}+` : String(p))
-
-// This run's four stages left to right, then two boxes: what waits for your review in notion
-// (dashed, like ai-video's review gates only you pass) and what scored high but is not in notion
-// yet. The bars are scaled to the run's largest count, not the stage before: older unscored items
-// are scored too, and earlier runs' picks are sent too, so it is not a strict funnel.
-function collectorPicture(s: Status): Picture | null {
-  const c = collectorCounts(s)
-  if (!c) return null
-  const H = 62
-  const COL = 96
-  const BOX = 112
-  const stages: [string, number][] = [['collected', c.collected], ['new', c.new], ['scored', c.scored], ['sent', c.sent]]
-  const top = Math.max(1, ...stages.map(([, n]) => n))
-  let body = ''
-  stages.forEach(([name, n], i) => {
-    const x = i * COL
-    // a count above 0 always shows a little fill
-    const part = n > 0 ? Math.max(n / top, 4 / (COL - 20)) : 0
-    body += `<text class="m px" x="${x}" y="14" font-size="12">${name}</text>` +
-      `<text class="t" x="${x}" y="40" font-size="22">${n}</text>` + bar(x, 50, COL - 20, part)
-    if (i < stages.length - 1) body += `<text class="m" x="${x + COL - 14}" y="37" font-size="16">›</text>`
-  })
-  const box = (x: number, name: string, value: string, color: string, isOn: boolean, isGate: boolean) =>
-    `<rect x="${x + 0.5}" y="0.5" width="${BOX - 1}" height="${H - 1}" rx="6" fill="var(--card)" stroke="${isOn ? color : 'var(--line)'}"${isGate ? ' stroke-dasharray="4 3"' : ''}/>` +
-    `<rect x="${x + 10}" y="6" width="8" height="8" rx="1" fill="${isOn ? color : 'var(--line)'}"/>` +
-    `<text class="m px" x="${x + 22}" y="14" font-size="12">${name}</text>` +
-    `<text class="${isOn ? 't' : 'm'}" x="${x + 10}" y="40" font-size="22">${value}</text>`
-  const review = W - 2 * BOX - 12
-  body += box(review, 'to review', toReview(c.pending), 'var(--listen)', (c.pending ?? 0) > 0, true)
-  if (c.pending == null) body += `<text class="m" x="${review + 10}" y="54" font-size="10">notion not read</text>`
-  body += box(W - BOX, 'unsent', String(c.unsent), 'var(--reject)', c.unsent > 0, false)
-  const notion = c.pending == null ? 'notion not read' : `${toReview(c.pending)} to review in notion`
-  return {
-    height: H,
-    alt: `collected ${c.collected}, new ${c.new}, scored ${c.scored}, sent ${c.sent}; ${notion}; ${c.unsent} unsent`,
-    source: svg(H, body),
-  }
-}
-
-// The same details as text, for surfaces without Svg (the terminal).
-export function detailLines(s: Status): string[] {
-  if (s.pipeline === 'music') {
-    const d = (s.detail ?? {}) as MusicDetail
-    const b = d.batches?.[0]
-    if (!b) return []
-    const failed = b.errors ? ` · failed ${b.errors}` : ''
-    const comfy = d.comfy ? ` · comfy ${d.comfy.up ? 'up' : 'down'}` : ''
-    return [`${b.name}: made ${b.generated ?? 0} · ok ${b.ok ?? 0} · to hear ${b.needs_listen ?? 0} · rejected ${b.rejected ?? 0}${failed}${comfy}`]
-  }
-  if (s.pipeline === 'ai-video') {
-    const d = (s.detail ?? {}) as VideoDetail
-    const jobs = d.jobs ?? []
-    if (!jobs.length) return []
-    const lanes = byStage(jobs)
-    // a gate whose every job is named again in the "waiting for you" lines the card shows (its
-    // first five) gives only its count here; otherwise the names, so none goes missing
-    const shownWaiting = (s.waiting ?? []).slice(0, 5).map(w => w.text)
-    const isNamedBelow = (st: Stage) => GATE.has(st) && lanes[st].every(j => shownWaiting.some(t => t.includes(jobName(j))))
-    const lines = STAGES.filter(st => lanes[st].length).map(st =>
-      isNamedBelow(st) ? `${st} (you): ${lanes[st].length}` : `${st}${GATE.has(st) ? ' (you)' : ''}: ${lanes[st].map(jobName).join(', ')}`)
-    if (d.cap_usd) lines.push(`spent $${(d.spend_usd ?? 0).toFixed(2)} of $${d.cap_usd.toFixed(2)}`)
-    return lines
-  }
-  if (s.pipeline.startsWith(COLLECTOR)) {
-    const c = collectorCounts(s)
-    if (!c) return []
-    return [
-      `collected ${c.collected} › new ${c.new} › scored ${c.scored} › sent ${c.sent}`,
-      `to review ${c.pending == null ? '? (notion not read)' : toReview(c.pending)} · unsent ${c.unsent}`,
-    ]
-  }
-  return []
-}
-
 export function picture(s: Status, isStale: boolean): Picture | null {
-  if (s.pipeline === 'music') return musicPicture(s, isStale) ?? progressPicture(s)
-  if (s.pipeline === 'ai-video') return videoPicture(s) ?? progressPicture(s)
-  if (s.pipeline.startsWith(COLLECTOR)) return collectorPicture(s) ?? progressPicture(s)
-  return progressPicture(s)
+  if (s.pipeline === 'music') return musicPicture(s, isStale)
+  if (s.pipeline === 'ai-video') return videoPicture(s)
+  return null
 }
 
 // The puppy beside the pane's first row, as puppy-skills draws it: typing at its laptop while a

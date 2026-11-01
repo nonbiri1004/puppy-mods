@@ -2,10 +2,12 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Conversation, Problem, Snapshot, Status, WaitingAction, WaitingItem } from '../types'
-import { cut, detailLines, MASCOT_SCALE, mascot, picture, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks, unknownStages } from './draw'
+import { cut, MASCOT_SCALE, mascot, picture, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks, unknownStages } from './draw'
 import type { Mood } from './draw'
-import { ago, alerts, expandHome, isFolded, isOpenable, isStale, markOf, parseStatus, quietWhy, sortCards, splitCards, textBar, titleOf, toggleFold, waitingEntries } from './format'
+import { ago, alerts, expandHome, isFolded, isOpenable, isStale, markOf, parseStatus, quietWhy, sortCards, splitCards, titleOf, toggleFold, waitingEntries } from './format'
 import { askName, folderName, FRESH_ASK_MS, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
+import { view } from './view'
+import type { View } from './view'
 
 const PANE = 'puppy-console'
 const REFRESH_MS = 60_000
@@ -23,15 +25,20 @@ const folds = atom({ plugin: 'puppy-console', key: 'folds' } as const, {} as Rec
 const isShowingOlder = atom({ plugin: 'puppy-console', key: 'isShowingOlder' } as const, false)
 const isShowingDone = atom({ plugin: 'puppy-console', key: 'isShowingDone' } as const, false)
 const isShowingOlderNeeds = atom({ plugin: 'puppy-console', key: 'isShowingOlderNeeds' } as const, false)
-// The waiting groups opened in "for you", by "<pipeline>:<group id>"; closed is the default.
+// Things opened by name, closed by default, each kept in the store under its prefix and key: the
+// waiting groups in "for you" ("<pipeline>:<group id>"), a card's details ("<pipeline>"), and a
+// list's "▸ N more" ("needs", "running", "done", "<pipeline>").
 const openGroups = atom({ plugin: 'puppy-console', key: 'openGroups' } as const, {} as Record<string, boolean>)
+const openDetails = atom({ plugin: 'puppy-console', key: 'openDetails' } as const, {} as Record<string, boolean>)
+const openMore = atom({ plugin: 'puppy-console', key: 'openMore' } as const, {} as Record<string, boolean>)
+const OPENED = ['group:', 'details:', 'more:'] as const
+type Opened = typeof OPENED[number]
 const writeError = atom({ plugin: 'puppy-console', key: 'writeError' } as const, null as string | null)
 const actionNote = atom({ plugin: 'puppy-console', key: 'actionNote' } as const, null as { text: string; isError: boolean } | null)
 const FOLD = 'fold:'
 const SHOWING_OLDER = 'isShowingOlder'
 const SHOWING_DONE = 'isShowingDone'
 const SHOWING_OLDER_NEEDS = 'isShowingOlderNeeds'
-const GROUP = 'group:'
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
@@ -200,19 +207,23 @@ function refresh($: EngineInterface, setting: string, isNotifying: boolean, isSh
 async function loadFolds($: EngineInterface): Promise<void> {
   try {
     const kept: Record<string, boolean> = {}
-    const opened: Record<string, boolean> = {}
+    const opened: Record<Opened, Record<string, boolean>> = { 'group:': {}, 'details:': {}, 'more:': {} }
     for (const key of await $.store.keys()) {
-      if (!key.startsWith(FOLD) && !key.startsWith(GROUP)) continue
+      const prefix = OPENED.find(p => key.startsWith(p))
+      if (!key.startsWith(FOLD) && !prefix) continue
       const v = await $.store.get(key)
       if (typeof v !== 'boolean') continue
       if (key.startsWith(FOLD)) kept[key.slice(FOLD.length)] = v
-      else if (v) opened[key.slice(GROUP.length)] = true
+      else if (prefix && v) opened[prefix][key.slice(prefix.length)] = true
     }
     const showing = (await $.store.get(SHOWING_OLDER)) === true
     const showingDone = (await $.store.get(SHOWING_DONE)) === true
     const showingOlderNeeds = (await $.store.get(SHOWING_OLDER_NEEDS)) === true
     await update($, folds, () => kept)
-    await update($, openGroups, () => opened)
+    // each atom named as it is: the engine lists what a module reads and writes from the code itself
+    await update($, openGroups, () => opened['group:'])
+    await update($, openDetails, () => opened['details:'])
+    await update($, openMore, () => opened['more:'])
     await update($, isShowingOlder, () => showing)
     await update($, isShowingDone, () => showingDone)
     await update($, isShowingOlderNeeds, () => showingOlderNeeds)
@@ -242,13 +253,16 @@ async function pressOlderNeeds($: EngineInterface): Promise<void> {
   await $.store.set(SHOWING_OLDER_NEEDS, next).catch(() => {})
 }
 
-// Opened, a group is kept by its pipeline and id, so the minute's read and a restart keep it open.
-async function pressGroup($: EngineInterface, key: string): Promise<void> {
-  const next = await update($, openGroups, was => {
+// Opened, a group, a card's details or a "more" is kept by its key, so the minute's read and a
+// restart keep it open; closed is the default, so closing forgets it.
+async function pressOpen($: EngineInterface, prefix: Opened, key: string): Promise<void> {
+  const flip = (was: Record<string, boolean>) => {
     const { [key]: isOpen, ...rest } = was
     return isOpen ? rest : { ...rest, [key]: true }
-  })
-  await (next[key] ? $.store.set(`${GROUP}${key}`, true) : $.store.delete(`${GROUP}${key}`)).catch(() => {})
+  }
+  const next = prefix === 'group:' ? await update($, openGroups, flip)
+    : prefix === 'details:' ? await update($, openDetails, flip) : await update($, openMore, flip)
+  await (next[key] ? $.store.set(`${prefix}${key}`, true) : $.store.delete(`${prefix}${key}`)).catch(() => {})
 }
 
 // A waiting item's button. open shows a file or folder with the system's own app (macOS
@@ -318,11 +332,11 @@ function safePicture(s: Status, stale: boolean) {
   }
 }
 
-function safeLines(s: Status): string[] {
+function safeView(s: Status, now: number): View {
   try {
-    return detailLines(s)
+    return view(s, now)
   } catch {
-    return []
+    return { summary: [], detailText: [], facts: [] }
   }
 }
 
@@ -333,7 +347,7 @@ export const register: Register = (on, options) => {
   const isPushing = isWriting && options.push !== 'off'
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'console', description: 'Open the console: your conversations, then the pipelines' })
+    await $.command.register({ name: 'console', description: 'Open the console: what waits for you, then the pipelines' })
     const started = await next(e)
     // the folder is read only on /console. a reload (or a new worker) with the pane still up reads again
     if (await isPaneUp($)) {
@@ -440,6 +454,8 @@ export const register: Register = (on, options) => {
     const isShowingDoneList = await read($, isShowingDone)
     const isShowingOlderNeedList = await read($, isShowingOlderNeeds)
     const opened = await read($, openGroups)
+    const openedDetails = await read($, openDetails)
+    const openedMore = await read($, openMore)
     const ownWriteError = await read($, writeError)
     const note = await read($, actionNote)
     if (!snap) return <Text dimColor>loading…</Text>
@@ -460,14 +476,11 @@ export const register: Register = (on, options) => {
       const word = markOf(s, now)
       const stateColor = isOlderCard ? undefined
         : word === 'error' ? 'error' : word === 'waiting' || word === 'quiet' ? 'warning' : word === 'running' ? 'success' : undefined
-      const since = ago(now - Date.parse(s.updated))
-      // what waits for you is listed in the "for you" card at the top; the card only counts it.
-      // folded, the line tells that instead of the computer, so it stays one line
-      const forYou = (s.waiting ?? []).length
-      const after = isCardFolded ? ` · ${since}` : ` · ${since}${s.host ? ` · ${s.host}` : ''}`
-      const facts = `${word}${forYou > 0 ? ` · ${forYou} for you` : ''}${after}`
+      // what waits for you is in the "for you" card, and the computer in the details: the header
+      // keeps to the state and when it last wrote
+      const after = ` · ${ago(now - Date.parse(s.updated))}`
       // the terminal clips the name by columns: the card's border and padding, the mark, the facts
-      const title = isTerminal ? cut(titleOf(s), Math.max(8, cardColumns - 2 - facts.length - 1)) : titleOf(s)
+      const title = isTerminal ? cut(titleOf(s), Math.max(8, cardColumns - 2 - word.length - after.length - 1)) : titleOf(s)
       // the card's name opens and folds it
       const header = (
         <Box flexDirection="row" justifyContent="space-between" gap={1}>
@@ -476,10 +489,8 @@ export const register: Register = (on, options) => {
               <Text dimColor>{isCardFolded ? '▸' : '▾'}</Text>{' '}<Text weight="semibold">{title}</Text>
             </Button>
           </Box>
-          <Box flexShrink={0} flexDirection="row">
-            <Text dimColor><Text color={stateColor}>{word}</Text>{forYou > 0 ? ' · ' : ''}</Text>
-            {forYou > 0 && <Text>{forYou} for you</Text>}
-            <Text dimColor>{after}</Text>
+          <Box flexShrink={0}>
+            <Text dimColor><Text color={stateColor}>{word}</Text>{after}</Text>
           </Box>
         </Box>
       )
@@ -490,32 +501,44 @@ export const register: Register = (on, options) => {
           </Box>
         )
       }
+      // the summary is text on both surfaces; the rest folds into "▸ details", where the desktop
+      // draws its picture in place of the same facts as text
+      const v = safeView(s, now)
       const pic = hasSvg ? safePicture(s, stale) : null
+      const isDetailsOpen = openedDetails[s.pipeline] === true
+      const hasDetails = Boolean(pic) || v.detailText.length > 0 || v.facts.length > 0
       return (
         <Box key={`card-${s.pipeline}`} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
           {header}
           <Text>{s.headline}</Text>
           {stale && <Text><Text color="warning">quiet</Text><Text dimColor> · {quietWhy(s, now)}</Text></Text>}
-          {pic && 'Svg' in ui
-            ? <ui.Svg source={pic.source} alt={pic.alt} isInteractive />
-            : s.progress && <Text mono dimColor>{textBar(s.progress)}</Text>}
-          {/* no picture (the terminal): the same details as text */}
-          {!pic && safeLines(s).map(line => <Text dimColor>{line}</Text>)}
-          {/* jobs at a stage the picture has no column for, named so none goes missing */}
+          {v.summary.map((l, i) => (
+            <Text key={`sum-${s.pipeline}-${i}`}>
+              {l.label && <Text dimColor>{l.label} </Text>}
+              {l.parts.map((p, k) => (
+                <Text>{k > 0 && <Text dimColor>{l.sep}</Text>}{p.isYou ? <Text color="warning">{p.text}</Text> : p.text}</Text>
+              ))}
+            </Text>
+          ))}
+          {/* jobs at a stage the summary has no place for, named so none goes missing */}
           {unknownStages(s).map(line => <Text key={`other-${line}`} dimColor>other stage · {line}</Text>)}
-          {s.last_output && (
-            <Text dimColor>last: {s.last_output.label}{s.last_output.at ? ` · ${ago(now - Date.parse(s.last_output.at))}` : ''}</Text>
+          {hasDetails && (
+            <Box key={`details-${s.pipeline}`} flexDirection="column" gap="xs">
+              <Button key={`show-details-${s.pipeline}`} label={`${isDetailsOpen ? '▾' : '▸'} details`} dimColor onPress={() => pressOpen($, 'details:', s.pipeline)} />
+              {isDetailsOpen && pic && 'Svg' in ui && <ui.Svg source={pic.source} alt={pic.alt} isInteractive />}
+              {isDetailsOpen && !pic && v.detailText.map(line => <Text dimColor>{line}</Text>)}
+              {isDetailsOpen && v.facts.map(line => <Text dimColor>{line}</Text>)}
+            </Box>
           )}
-          {s.next && !(s.waiting ?? []).some(w => w.text === s.next) && <Text dimColor>next: {s.next}</Text>}
         </Box>
       )
     }
 
     const since = (c: Conversation) => `${c.project ? `${c.project} · ` : ''}${ago(now - Date.parse(c.updated))}`
-    const line = (text: string) => (isTerminal ? cut(text, cardColumns) : text)
     // One row: the name gives way, the facts on the right never wrap (STYLE.md, long text).
-    const row = (c: Conversation, facts: string, isDim: boolean, title = c.title) => {
-      const name = isTerminal ? cut(title, Math.max(8, cardColumns - facts.length - 3)) : title
+    // columns: what the terminal row has, a card's body unless it sits outside any card.
+    const row = (c: Conversation, facts: string, isDim: boolean, title = c.title, columns = cardColumns) => {
+      const name = isTerminal ? cut(title, Math.max(8, columns - facts.length - 3)) : title
       return (
         <Box key={`c:${c.id}`} flexDirection="row" gap={1}>
           <Box flexShrink={1} minWidth={0}>
@@ -562,28 +585,26 @@ export const register: Register = (on, options) => {
     // that ask you something (answered in that conversation), then each pipeline's waiting items,
     // with the buttons its status file gives them (open a file, start a message in the prompt box).
     // A question older than a day folds behind "▸ older N"; a pipeline's named group of items
-    // folds into one line that opens in place.
+    // folds into one line that opens in place. Each part counts its own things: a conversation, a
+    // pipeline's item (one item may be 41 songs), so the card adds up no total.
     const forYouCard = (needs: Conversation[], cards: Status[]) => {
       const waitingCards = cards.filter(s => (s.waiting ?? []).length > 0)
-      const count = needs.length + waitingCards.reduce((n, s) => n + (s.waiting ?? []).length, 0)
-      if (count === 0) return null
+      if (needs.length === 0 && waitingCards.length === 0) return null
       const isFresh = (c: Conversation) => c.state === 'error' || now - Date.parse(c.updated) <= FRESH_ASK_MS
       const fresh = needs.filter(isFresh)
       const older = needs.filter(c => !isFresh(c))
+      const isAllNeeds = openedMore.needs === true
       return (
         <Box key="card-for-you" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
-          <Box flexDirection="row" justifyContent="space-between">
-            <Text weight="semibold">for you</Text>
-            <Text dimColor><Text color="warning">{count} waiting</Text></Text>
-          </Box>
+          <Text weight="semibold">for you</Text>
           {needs.length > 0 && (
             <Box key="for-conversations" flexDirection="column">
-              <Text dimColor>conversations</Text>
+              <Text dimColor>conversations · {needs.length}</Text>
               {/* the terminal has no "xs" gap, so a blank row keeps one conversation from running into the next */}
               <Box key="needs" flexDirection="column" gap={isTerminal ? 1 : 'xs'}>
-                {fresh.slice(0, MAX_NEEDS).map(need)}
+                {(isAllNeeds ? fresh : fresh.slice(0, MAX_NEEDS)).map(need)}
               </Box>
-              {fresh.length > MAX_NEEDS && <Text dimColor>and {fresh.length - MAX_NEEDS} more waiting</Text>}
+              {fresh.length > MAX_NEEDS && <Button key="more-needs" label={`${isAllNeeds ? '▾' : '▸'} ${fresh.length - MAX_NEEDS} more`} dimColor onPress={() => pressOpen($, 'more:', 'needs')} />}
               {older.length > 0 && (
                 <Box key="older-needs" flexDirection="column" gap={isTerminal ? 1 : 'xs'}>
                   <Button key="show-older-needs" label={`${isShowingOlderNeedList ? '▾' : '▸'} older ${older.length}`} dimColor onPress={() => pressOlderNeeds($)} />
@@ -594,11 +615,12 @@ export const register: Register = (on, options) => {
           )}
           {waitingCards.map(s => {
             const entries = waitingEntries(s)
-            const shown = entries.slice(0, MAX_ITEMS)
+            const isAll = openedMore[s.pipeline] === true
+            const shown = isAll ? entries : entries.slice(0, MAX_ITEMS)
             const hidden = entries.slice(MAX_ITEMS).reduce((n, e) => n + ('item' in e ? 1 : e.items.length), 0)
             return (
               <Box key={`for-${s.pipeline}`} flexDirection="column">
-                <Text dimColor>{titleOf(s)}</Text>
+                <Text dimColor>{titleOf(s)} · {(s.waiting ?? []).length}</Text>
                 {shown.map(e => {
                   if ('item' in e) return item(s, e.item)
                   const key = `${s.pipeline}:${e.group.id}`
@@ -607,7 +629,7 @@ export const register: Register = (on, options) => {
                   const oldest = e.items.map(w => w.since).filter(t => t && !Number.isNaN(Date.parse(t))).sort((a, b) => Date.parse(a!) - Date.parse(b!))[0]
                   return (
                     <Box key={`grp:${key}`} flexDirection="column">
-                      <Button key={`group:${key}`} plain label={`${isOpen ? '▾' : '▸'} ${e.group.label} ×${e.items.length}${oldest ? ` · ${waitedFor(oldest)}` : ''}`} onPress={() => pressGroup($, key)} />
+                      <Button key={`group:${key}`} plain label={`${isOpen ? '▾' : '▸'} ${e.group.label} ×${e.items.length}${oldest ? ` · ${waitedFor(oldest)}` : ''}`} onPress={() => pressOpen($, 'group:', key)} />
                       {isOpen && (
                         <Box flexDirection="column" paddingLeft={2}>
                           {e.items.map(w => item(s, w))}
@@ -616,7 +638,7 @@ export const register: Register = (on, options) => {
                     </Box>
                   )
                 })}
-                {hidden > 0 && <Text dimColor>· and {hidden} more</Text>}
+                {hidden > 0 && <Button key={`more-${s.pipeline}`} label={`${isAll ? '▾' : '▸'} ${hidden} more`} dimColor onPress={() => pressOpen($, 'more:', s.pipeline)} />}
               </Box>
             )
           })}
@@ -625,30 +647,28 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // The conversations that are running get one quiet line each; done ones fold behind
-    // "▸ done N". The ones that wait for you are in the "for you" card above.
-    const conversationsCard = (list: Conversation[]) => {
-      const needs = list.filter(c => ['waiting', 'error'].includes(shownState(c, now)))
+    // The other conversations, below the pipelines and with no card of their own: the running
+    // ones get one quiet line each, the done ones fold behind "▸ done N". The ones that wait for
+    // you are in the "for you" card.
+    const activity = (list: Conversation[]) => {
       const runningList = list.filter(c => shownState(c, now) === 'running')
       const doneList = list.filter(c => shownState(c, now) === 'done')
+      const isAllRunning = openedMore.running === true
+      const isAllDone = openedMore.done === true
+      const DONE_SHOWN = MAX_OTHERS * 2
+      // outside any card, a terminal row has the pane's whole width
+      const line = (c: Conversation, facts: string) => row(c, facts, true, c.title, e.props.bodyColumns)
+      if (list.length === 0) return <Text key="activity" dimColor>no conversations yet: each one shows here after its first turn</Text>
+      if (runningList.length === 0 && doneList.length === 0) return null
       return (
-        <Box key="conversations" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
-          <Box flexDirection="row" justifyContent="space-between">
-            <Text weight="semibold">conversations</Text>
-            <Text dimColor>
-              {needs.length > 0 ? <Text color="warning">{needs.length} waiting</Text> : 'none waiting'}
-              {runningList.length > 0 ? ` · ${runningList.length} running` : ''}
-            </Text>
-          </Box>
-          {list.length === 0 && <Text dimColor>no conversations yet: each one shows here after its first turn</Text>}
-          {needs.length > 0 && <Text dimColor>· {needs.length} waiting for you, above</Text>}
-          {runningList.slice(0, MAX_OTHERS).map(c => row(c, `running · ${since(c)}`, true))}
-          {runningList.length > MAX_OTHERS && <Text dimColor>· and {runningList.length - MAX_OTHERS} more running</Text>}
+        <Box key="activity" flexDirection="column" gap="xs">
+          {(isAllRunning ? runningList : runningList.slice(0, MAX_OTHERS)).map(c => line(c, `running · ${since(c)}`))}
+          {runningList.length > MAX_OTHERS && <Button key="more-running" label={`${isAllRunning ? '▾' : '▸'} ${runningList.length - MAX_OTHERS} more running`} dimColor onPress={() => pressOpen($, 'more:', 'running')} />}
           {doneList.length > 0 && (
             <Box key="done" flexDirection="column" gap="xs">
               <Button key="show-done" label={`${isShowingDoneList ? '▾' : '▸'} done ${doneList.length}`} dimColor onPress={() => pressDone($)} />
-              {isShowingDoneList && doneList.slice(0, MAX_OTHERS * 2).map(c => row(c, since(c), true))}
-              {isShowingDoneList && doneList.length > MAX_OTHERS * 2 && <Text dimColor>· and {doneList.length - MAX_OTHERS * 2} more</Text>}
+              {isShowingDoneList && (isAllDone ? doneList : doneList.slice(0, DONE_SHOWN)).map(c => line(c, since(c)))}
+              {isShowingDoneList && doneList.length > DONE_SHOWN && <Button key="more-done" label={`${isAllDone ? '▾' : '▸'} ${doneList.length - DONE_SHOWN} more`} dimColor onPress={() => pressOpen($, 'more:', 'done')} />}
             </Box>
           )}
         </Box>
@@ -679,7 +699,6 @@ export const register: Register = (on, options) => {
           <Button key="refresh" label="refresh" hotkey="r" onPress={() => refresh($, setting, false, isWriting)} />
         </Box>
         {forYouCard(isWriting ? snap.conversations.filter(c => ['waiting', 'error'].includes(shownState(c, now))) : [], current)}
-        {isWriting && conversationsCard(snap.conversations)}
         {isWriting && snap.conversationsError && <Text color="error">can't read the conversations folder: {snap.conversationsError}</Text>}
         {isWriting && ownWriteError && <Text dimColor>this conversation could not write its file: {ownWriteError}</Text>}
         {snap.dirError && (
@@ -704,6 +723,7 @@ export const register: Register = (on, options) => {
             {isShowingOlderCards && older.map(s => card(s, true))}
           </Box>
         )}
+        {isWriting && activity(snap.conversations)}
         {snap.problems.map(p => (
           <Text key={`p:${p.file}`} dimColor>skipped {p.file}: {p.reason}</Text>
         ))}

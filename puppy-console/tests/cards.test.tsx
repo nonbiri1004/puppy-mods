@@ -1,7 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { byStage, collectorCounts, cut, detailLines, MAX_SQUARES, picture, unknownStages } from '../hooks/draw'
+import { byStage, collectorCounts, cut, MAX_SQUARES, picture, unknownStages } from '../hooks/draw'
 import { ago, alerts, expandHome, isFolded, isOlder, isOpenable, MAX_ACTIONS, parseActions, isStale, markOf, OLDER_MS, parseStatus, sortCards, splitCards, textBar, toggleFold } from '../hooks/format'
+import { lineText, view } from '../hooks/view'
 import type { Snapshot, Status } from '../types'
 
 const base = {
@@ -154,8 +155,9 @@ test('the pane draws one card per file and names the files it skipped', { option
     expect((await ui.find({ type: 'Text', text: /42\/70 usable/ }))?.text).toBe('05 · 42/70 usable')
     expect(await ui.findAll({ type: 'Text', text: /hear song 7/ })).toHaveLength(1)   // "next" repeating a waiting item is not shown
     expect(await ui.find({ type: 'Text', text: /3 jobs, all done/ })).toBeTruthy()
-    // the terminal has no pictures: the details come as text there
-    if (surface === 'terminal') expect((await ui.find({ type: 'Text', text: /ep04/ }))?.text).toBe('final (you): ep04')
+    // the summary is the same text on both surfaces; the job names wait in the folded details
+    expect((await ui.find({ type: 'Text', text: /^plan / }))?.text).toBe('plan 0 › clips 0 › voice 0 › compose 0 › final 1 › done 0')
+    expect(await ui.find({ type: 'Text', text: /ep04/ })).toBeFalsy()
     expect((await ui.find({ type: 'Text', text: /skipped old\.json/ }))?.text).toMatch(/pipeline-status/)
     expect(await ui.find({ type: 'Text', text: /tmp/ })).toBeFalsy()
     await ui.unmount()
@@ -211,39 +213,53 @@ const collector = (detail: object, pipeline = 'collector-tech-news') =>
   parseStatus(file({ pipeline, state: 'waiting', detail }))
 const COUNTS = { collected: 412, new: 58, scored: 58, sent: 9, unsent: 2, pending: 27 }
 
-test('a collector card draws its counts', () => {
-  const pic = picture(collector({ counts: COUNTS, errors: [] }), false)!
-  expect(pic.height).toBe(62)
-  expect(pic.alt).toContain('27 to review in notion')
-  expect(pic.alt).toContain('2 unsent')
-  expect(pic.source).toContain('stroke-dasharray="4 3"')
-  expect(pic.source).toContain('var(--reject)')
-  expect(pic.source.length).toBeLessThan(131072)
-  expect(detailLines(collector({ counts: COUNTS }))).toEqual([
-    'collected 412 › new 58 › scored 58 › sent 9',
-    'to review 27 · unsent 2',
+const summaryOf = (s: Status) => view(s, Date.parse(base.updated)).summary.map(lineText)
+
+test('a collector card: this run\'s counts side by side, no arrows (not a funnel), then what waits in notion', () => {
+  const s = collector({ counts: COUNTS, errors: [] })
+  expect(summaryOf(s)).toEqual([
+    'this run: collected 412 · new 58 · scored 58 · sent 9',
+    'to review in notion 27 · unsent 2',
   ])
+  // the review waits for you; its numbers are the whole story, so no picture in the details
+  expect(view(s, 0).summary[1]!.parts[0]!.isYou).toBe(true)
+  expect(picture(s, false)).toBeNull()
 })
 
 test('a collector card: notion not read, and the 100 cap', () => {
   const unread = collector({ counts: { ...COUNTS, unsent: 0, pending: null } })
-  expect(picture(unread, false)!.alt).toContain('notion not read')
-  expect(detailLines(unread)[1]).toBe('to review ? (notion not read) · unsent 0')
-  for (const pending of [100, 140]) expect(detailLines(collector({ counts: { ...COUNTS, pending } }))[1]).toMatch(/^to review 100\+/)
+  expect(summaryOf(unread)[1]).toBe('to review in notion ? (notion not read) · unsent 0')
+  expect(view(unread, 0).summary[1]!.parts[0]!.isYou).toBe(false)
+  for (const pending of [100, 140]) expect(summaryOf(collector({ counts: { ...COUNTS, pending } }))[1]).toMatch(/^to review in notion 100\+/)
   // a stage number that is missing or odd counts as 0
   expect(collectorCounts(collector({ counts: { collected: 3, new: 'x' } }))).toEqual({ collected: 3, new: 0, scored: 0, sent: 0, unsent: 0, pending: null })
 })
 
-test('an older collector file (no counts) draws as before', () => {
+test('an older collector file (no counts) gives its progress, like any pipeline', () => {
   for (const detail of [{ errors: ['x'] }, { counts: [] }, { counts: { collected: 'x' } }]) {
-    expect(picture(collector(detail), false)).toBeNull()
-    expect(detailLines(collector(detail))).toEqual([])
+    expect(summaryOf(collector(detail))).toEqual([])
+    expect(summaryOf(parseStatus(file({ pipeline: 'collector-x', detail, progress: { done: 3, total: 10 } })))).toEqual(['▓▓▓░░░░░░░ 3/10'])
   }
   // only the prefix "collector-" is a collector
-  for (const pipeline of ['info-collector', 'collectors']) {
-    expect(picture(collector({ counts: COUNTS }, pipeline), false)).toBeNull()
-    expect(detailLines(collector({ counts: COUNTS }, pipeline))).toEqual([])
-  }
+  for (const pipeline of ['info-collector', 'collectors']) expect(summaryOf(collector({ counts: COUNTS }, pipeline))).toEqual([])
+})
+
+test('a music card: the batch, then its songs; the songs to hear wait for you', () => {
+  const s = parseStatus(file({ detail: { comfy: { up: true, running: 1, pending: 0 }, batches: [{ name: '06_讀書', generated: 70, ok: 19, needs_listen: 41, rejected: 10, errors: 2, avg_gen_sec: 840 }] } }))
+  const v = view(s, 0)
+  expect(v.summary.map(lineText)).toEqual(['06_讀書', 'made 70 · ok 19 · to hear 41 · rejected 10 · failed 2 · 14 min / song'])
+  expect(v.summary[1]!.parts.filter(p => p.isYou).map(p => p.text)).toEqual(['to hear 41'])
+  expect(v.detailText).toEqual(['comfy up'])
+  // nothing to hear: nothing marked
+  const heard = parseStatus(file({ detail: { batches: [{ name: 'x', generated: 3, ok: 3, needs_listen: 0 }] } }))
+  expect(view(heard, 0).summary[1]!.parts.some(p => p.isYou)).toBe(false)
+})
+
+test('the details: the computer, the last output, and a "next" that is not already waiting', () => {
+  const t = Date.parse(base.updated)
+  const s = parseStatus(file({ host: 'studio-mac', last_output: { label: 'song #136', at: base.updated }, next: 'hear song 7', waiting: [{ id: 'a', text: 'hear song 7' }] }))
+  expect(view(s, t + 2 * 3_600_000).facts).toEqual(['on studio-mac', 'last: song #136 · 2h ago'])
+  expect(view(parseStatus(file({ next: 'make 10 more' })), t).facts).toEqual(['next: make 10 more'])
 })
 
 test('time in one unit, as a glance needs it', () => {
@@ -276,20 +292,23 @@ test('a stale error stays an error; a stale card otherwise is quiet', () => {
   expect(markOf(parseStatus(file({ state: 'running', stale_after_sec: 60 })), t)).toBe('running')
 })
 
-test('video: a stage outside the list gets no column but is named; a gate lists only its count when waiting says the rest', () => {
+test('video: every stage in one row, the review gates marked when a job waits there; a stage outside the list is named', () => {
   const jobs = [
     { job: 'baibai/ep04', stage: 'final', spend_usd: 0, cap_usd: 1 },
     { job: 'baibai/電車', stage: 'deliver', spend_usd: 0, cap_usd: 1 },
     { job: 'baibai/ep05', stage: 'clips', spend_usd: 0, cap_usd: 1 },
   ]
-  const s = parseStatus(file({ pipeline: 'ai-video', detail: { jobs }, waiting: [{ id: 'w', text: 'approve baibai/ep04 final' }] }))
+  const s = parseStatus(file({ pipeline: 'ai-video', detail: { jobs, spend_usd: 0.49, cap_usd: 42.5 }, waiting: [{ id: 'w', text: 'approve baibai/ep04 final' }] }))
   const lanes = byStage(jobs as never)
   expect(lanes.plan).toEqual([])
   expect(Object.values(lanes).flat()).toHaveLength(2)
   expect(unknownStages(s)).toEqual(['deliver: 電車'])
-  expect(detailLines(s)).toEqual(['clips: ep05', 'final (you): 1'])
-  const noWaiting = parseStatus(file({ pipeline: 'ai-video', detail: { jobs } }))
-  expect(detailLines(noWaiting)).toContain('final (you): ep04')
+  const v = view(s, 0)
+  expect(v.summary.map(lineText)).toEqual(['plan 0 › clips 1 › voice 0 › compose 0 › final 1 › done 0', 'spent $0.49 of $42.50'])
+  // plan is a gate too, but nothing waits there
+  expect(v.summary[0]!.parts.filter(p => p.isYou).map(p => p.text)).toEqual(['final 1'])
+  // the details name every job, whatever "for you" already says
+  expect(v.detailText).toEqual(['clips: ep05', 'final (you): ep04'])
 })
 
 test('a video detail of an odd shape names nothing and throws nothing', () => {
@@ -297,18 +316,6 @@ test('a video detail of an odd shape names nothing and throws nothing', () => {
     const s = parseStatus(file({ pipeline: 'ai-video', detail: { jobs } }))
     expect(unknownStages(s)).toEqual([])
   }
-})
-
-test('video: a gate job the waiting lines do not name keeps its name on the terminal', () => {
-  const jobs = [
-    { job: 'baibai/ep04', stage: 'final', spend_usd: 0, cap_usd: 1 },
-    { job: 'baibai/ep06', stage: 'final', spend_usd: 0, cap_usd: 1 },
-  ]
-  const s = parseStatus(file({ pipeline: 'ai-video', detail: { jobs }, waiting: [{ id: 'w', text: 'approve ep04' }] }))
-  expect(detailLines(s)).toEqual(['final (you): ep04, ep06'])
-  const six = Array.from({ length: 6 }, (_, i) => ({ id: `w${i}`, text: `approve ep0${i}` }))
-  const many = parseStatus(file({ pipeline: 'ai-video', detail: { jobs: [{ job: 'ep05', stage: 'final', spend_usd: 0, cap_usd: 1 }] }, waiting: six }))
-  expect(detailLines(many)).toEqual(['final (you): ep05'])
 })
 
 test('a waiting item keeps only buttons with a short label and exactly one of open or fill', () => {

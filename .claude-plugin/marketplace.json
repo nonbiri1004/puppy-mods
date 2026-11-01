@@ -16,7 +16,7 @@
     {
       "name": "puppy-console",
       "source": "./puppy-console",
-      "description": "a pane with your conversations first, then one card per production pipeline, read from small status files"
+      "description": "a pane with what waits for you first, then one short card per production pipeline, read from small status files"
     },
     {
       "name": "puppy-skills",

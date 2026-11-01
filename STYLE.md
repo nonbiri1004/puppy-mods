@@ -23,6 +23,11 @@ How every puppy mod looks, so they feel like one family. `puppy-console` is the 
 - Give each card a `key` that starts with `card-`, so tests can find it.
 - Lists inside a card get a dim label above each group, not another border. One border level only.
 - Extra lists (done items, old things) stay folded below the cards: a dim button `▸ done 3`, `▾` when open.
+- A list cut at a limit ends in a dim button `▸ 2 more` that opens the rest, never a line of text: what the pane leaves out must be one press away.
+- What waits for you is said in one place (the top card), once. Other cards don't list or count it again.
+- Counts are per group (`conversations · 3`, `music · 1`). Don't add up things of different kinds into one total: one item may be 41 songs.
+- A card that shows the state of a piece of work (a pipeline) is short: its header (name, state, time), one headline, and two or three summary lines. The rest (the computer it runs on, the last output, what comes next, a picture) folds behind a dim `▸ details` button.
+- A summary line is plain text, the same on every surface, so it never needs a picture: `plan 2 › clips 2 › final 3 › done 2`. Use `›` only where things really flow from one step into the next; counts that sit side by side get ` · `. Give each number that waits for you the `warning` color: the one place a line may hold that color twice (two review gates).
 - Long text: on the terminal, clip by columns (a card has 4 fewer than the pane: border and padding). On the desktop, give the `Text` `wrap="truncate-end"` and let it cut at the edge; counting columns there cuts too early, most of all for Chinese. In a row, the Box around that Text needs `flexShrink={1} minWidth={0}`; without `minWidth={0}` it never gets narrower than its text and runs past the card.
 - Rows with a mark in front (○, ↗, ✓): put the mark in a `<Box width={3} flexShrink={0}>`, so the words line up.
 - Facts on the right of a row (a state, a link, an age) sit in one `<Box flexShrink={0}>`: they never wrap, the words in the middle give way. On the terminal a `Link` prints its whole address, so show a short name there (`#16`).
@@ -41,6 +46,9 @@ How every puppy mod looks, so they feel like one family. `puppy-console` is the 
 ## Pictures (SVG)
 
 - Only where the surface has `Svg` (the desktop app). The terminal gets the same facts as text lines: never drop a fact because there is no picture.
+- Decide the facts once, in one place (`puppy-console/hooks/view.ts`), and let each surface only lay them out. Two code paths that each pick their own facts drift apart.
+- A picture of a piece of work goes inside `▸ details`, never in place of the summary. A picture that only repeats the summary's numbers is not drawn.
+- No node graph for a straight line of steps: a row of text says the same in less room.
 - Emoji (⏰, ✓…) keep their own colors; they are not our drawings. The greys-only rule is for icons we draw.
 - Small icons are 14×14 pixel drawings in greys only, like lofipuppy.app's `PixelIcon`; the terminal shows a text mark in their place.
 - Warm greys, light by day and dark by night with `prefers-color-scheme`. Copy the palette from `puppy-console/hooks/draw.ts` (`--card`, `--line`, `--text`, `--muted`, and the soft `--ok` / `--listen` / `--reject`).

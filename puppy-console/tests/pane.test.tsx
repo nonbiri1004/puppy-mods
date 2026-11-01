@@ -189,8 +189,8 @@ test('a card folds to its header line and opens again; the store remembers', { o
   await ui.press({ key: 'fold-music' })
   expect((await ui.find({ key: 'fold-music' }))?.text).toMatch(/^▸ music/)
   expect(await ui.find({ type: 'Text', text: '05 · 42/70 usable' })).toBeFalsy()
-  // folded, the line still says what waits for you, and the "for you" card still lists it
-  expect(await ui.find({ type: 'Text', text: /1 for you/ })).toBeTruthy()
+  // folded, the line keeps to the state and the time; what waits for you is in "for you"
+  expect(textOf(await ui.find({ key: 'card-music' }))).toMatch(/waiting · 1m ago$/)
   expect(textOf(await ui.find({ key: 'card-for-you' }))).toMatch(/hear song 7/)
   expect(w.store.get('fold:music')).toBe(true)
 
@@ -247,27 +247,66 @@ test('the terminal puppy shows only when the pane has 26 rows or more', { option
 
 const COUNTS = { collected: 412, new: 58, scored: 58, sent: 9, unsent: 2, pending: 27 }
 
-test('a collector card: a picture on the desktop, the same numbers as text on the terminal', { options: { status_dir: '/s' } }, async ($, on) => {
+for (const surface of ['terminal', 'desktop'] as const)
+test(`a collector card: the same lines on both surfaces, the review in the warning color (${surface})`, { options: { status_dir: '/s' } }, async ($, on) => {
   world(on, {
     'collector-tech-news.json': status({ pipeline: 'collector-tech-news', state: 'waiting', headline: '收集 412 · 新 58 · 送進 Notion 9', detail: { counts: COUNTS, errors: [] } }),
     'collector-old.json': status({ pipeline: 'collector-old', state: 'waiting', headline: 'an older file', detail: { errors: ['x'] } }),
   })
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/', surface, isInteractive: true })
   await $.command.run(RUN)
-
-  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await term.find({ type: 'Text', text: /collected 412/ }))?.text).toBe('collected 412 › new 58 › scored 58 › sent 9')
-  expect((await term.find({ type: 'Text', text: /to review/ }))?.text).toBe('to review 27 · unsent 2')
+  const ui = await $.ui.mount({ ...PANE, surface })
+  expect((await ui.find({ type: 'Text', text: /collected 412/ }))?.text).toBe('this run: collected 412 · new 58 · scored 58 · sent 9')
+  expect((await ui.find({ type: 'Text', text: /^to review/ }))?.text).toBe('to review in notion 27 · unsent 2')
+  expect((await ui.findAll({ type: 'Text' })).filter(t => t.props.color === 'warning').map(t => t.text)).toContain('to review in notion 27')
+  // no picture: its numbers are all in the lines
+  expect((await ui.findAll({ type: 'Svg' })).filter(s => !/^the puppy/.test(String(s.props.alt)))).toEqual([])
   // an older file without counts: the card as before, no lines
-  expect(await term.find({ type: 'Text', text: 'an older file' })).toBeTruthy()
-  expect(await term.findAll({ type: 'Text', text: /collected/ })).toHaveLength(1)
-  await term.unmount()
+  expect(await ui.find({ type: 'Text', text: 'an older file' })).toBeTruthy()
+  expect(await ui.findAll({ type: 'Text', text: /^this run: collected/ })).toHaveLength(1)
+  await ui.unmount()
+})
 
+const VIDEO = status({
+  pipeline: 'ai-video', state: 'waiting', headline: '2 open', host: 'studio-mac',
+  last_output: { label: '電車 final.mp4', at: at(2 * DAY) },
+  detail: { spend_usd: 0.49, cap_usd: 42.5, jobs: [
+    { job: 'baibai/ep04', stage: 'final', spend_usd: 0.2, cap_usd: 10 },
+    { job: 'baibai/ep05', stage: 'clips', spend_usd: 0.29, cap_usd: 10 },
+  ] },
+})
+
+test('a card shows its summary; "▸ details" holds the picture or the same facts as text, and the computer', { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w } = world(on, { 'ai-video.json': VIDEO })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect((await ui.find({ type: 'Text', text: /^plan / }))?.text).toBe('plan 0 › clips 1 › voice 0 › compose 0 › final 1 › done 0')
+    expect(await ui.find({ type: 'Text', text: 'spent $0.49 of $42.50' })).toBeTruthy()
+    // the header keeps to the state and the time
+    expect(textOf(await ui.find({ key: 'card-ai-video' }))).not.toMatch(/studio-mac|for you/)
+    expect((await ui.find({ key: 'show-details-ai-video' }))?.text).toBe('▸ details')
+    expect(await ui.find({ type: 'Text', text: /ep05/ })).toBeFalsy()
+    await ui.unmount()
+  }
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await desk.find({ type: 'Text', text: /collected 412/ })).toBeFalsy()
-  const pics = (await desk.findAll({ type: 'Svg' })).map(s => String(s.props.alt))
-  expect(pics.filter(alt => /to review in notion/.test(alt))).toEqual(['collected 412, new 58, scored 58, sent 9; 27 to review in notion; 2 unsent'])
+  await desk.press({ key: 'show-details-ai-video' })
+  expect(w.store.get('details:ai-video')).toBe(true)
+  expect((await desk.findAll({ type: 'Svg' })).map(s => String(s.props.alt))).toContain('2 jobs, 1 at a review gate')
+  expect(await desk.find({ type: 'Text', text: /ep05/ })).toBeFalsy()
+  expect(await desk.find({ type: 'Text', text: 'on studio-mac' })).toBeTruthy()
+  expect(await desk.find({ type: 'Text', text: 'last: 電車 final.mp4 · 2d ago' })).toBeTruthy()
   await desk.unmount()
+  // the terminal: the same details as text, and open there too
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await term.find({ key: 'show-details-ai-video' }))?.text).toBe('▾ details')
+  expect(await term.find({ type: 'Text', text: 'clips: ep05' })).toBeTruthy()
+  expect(await term.find({ type: 'Text', text: 'final (you): ep04' })).toBeTruthy()
+  expect(await term.find({ type: 'Text', text: 'on studio-mac' })).toBeTruthy()
+  await term.press({ key: 'show-details-ai-video' })
+  expect(w.store.has('details:ai-video')).toBe(false)
+  await term.unmount()
 })
 
 const conversation = (over: object) => JSON.stringify({
@@ -445,15 +484,17 @@ test('"for you" comes first: the asking conversations, then each pipeline\'s wai
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     const texts = (await ui.findAll({ type: 'Text' })).map(t => textOf(t))
-    expect(texts.indexOf('for you')).toBeLessThan(texts.indexOf('conversations'))
+    expect(texts.indexOf('for you')).toBeLessThan(texts.indexOf('1 job at final'))
     const forYou = textOf(await ui.find({ key: 'card-for-you' }))
-    expect(forYou).toMatch(/2 waiting/)
+    // each part counts its own things, and the card adds up no total
+    expect(forYou).toMatch(/conversations · 1/)
+    expect(forYou).toMatch(/ai-video · 1/)
+    expect(forYou).not.toMatch(/waiting/)
     expect(forYou).toMatch(/Open a PR\?/)
     expect(forYou).toMatch(/check ep04/)
-    // the conversations card and the pipeline card only point at it
-    expect(textOf(await ui.find({ key: 'conversations' }))).not.toMatch(/Open a PR/)
-    expect(textOf(await ui.find({ key: 'card-ai-video' }))).not.toMatch(/check ep04/)
-    expect(textOf(await ui.find({ key: 'card-ai-video' }))).toMatch(/1 for you/)
+    // said once: no conversations card, and the pipeline card does not count it again
+    expect(await ui.find({ key: 'conversations' })).toBeFalsy()
+    expect(textOf(await ui.find({ key: 'card-ai-video' }))).not.toMatch(/check ep04|for you/)
     expect((await ui.find({ key: 'act:ai-video:f:0' }))?.text).toBe('play')
     expect((await ui.find({ key: 'act:ai-video:f:1' }))?.text).toBe('send back…')
     await ui.unmount()
@@ -511,7 +552,7 @@ test('a question waiting more than a day folds into "older" in "for you"; an err
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     const forYou = textOf(await ui.find({ key: 'card-for-you' }))
-    expect(forYou).toMatch(/3 waiting/)
+    expect(forYou).toMatch(/conversations · 3/)
     expect(forYou).toMatch(/Ship it\?/)
     expect(forYou).toMatch(/broke/)
     expect(forYou).not.toMatch(/Merge\?/)
@@ -550,7 +591,7 @@ test('a pipeline\'s items in one group fold into one line; ungrouped, unknown an
     const ui = await $.ui.mount({ ...PANE, surface })
     const forYou = textOf(await ui.find({ key: 'card-for-you' }))
     // every item still counts
-    expect(forYou).toMatch(/5 waiting/)
+    expect(forYou).toMatch(/ai-video · 5/)
     expect((await ui.find({ key: 'group:ai-video:final-review' }))?.text).toMatch(/^▸ 成片待審 ×3 · 24h/)
     expect(forYou).not.toMatch(/approve baibai\/ep04/)
     expect(await ui.find({ key: 'act:ai-video:f1:0' })).toBeFalsy()
@@ -587,6 +628,30 @@ test('a group\'s wait is its oldest item by time, whatever offset each time is w
   await $.command.run(RUN)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ key: 'group:ai-video:final-review' }))?.text).toMatch(/· 3h$/)
+  await ui.unmount()
+})
+
+test('a list past its limit ends in a "▸ N more" button that opens the rest', { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w } = world(on, {
+    'music.json': status({ state: 'waiting', waiting: Array.from({ length: 7 }, (_, i) => ({ id: `s${i}`, text: `hear song ${i}` })) }),
+  })
+  for (let i = 0; i < 8; i++) w.sessions[`q${i}.json`] = conversation({ id: `q${i}`, isAppTitle: true, title: `asks ${i}`, ask: `question ${i}?`, updated: at((i + 1) * 60_000) })
+  for (let i = 0; i < 7; i++) w.sessions[`r${i}.json`] = conversation({ id: `r${i}`, isAppTitle: true, title: `busy ${i}`, state: 'running', ask: null, updated: at((i + 1) * 60_000) })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  for (const [key, label, hidden] of [['more-needs', '▸ 2 more', /question 7\?/], ['more-music', '▸ 2 more', /hear song 6/], ['more-running', '▸ 2 more running', /busy 6/]] as const) {
+    expect((await ui.find({ key }))?.text).toBe(label)
+    expect((await ui.findAll({ type: 'Text' })).some(t => hidden.test(textOf(t)))).toBe(false)
+    await ui.press({ key })
+    expect((await ui.find({ key }))?.text).toBe(label.replace('▸', '▾'))
+    expect((await ui.findAll({ type: 'Text' })).some(t => hidden.test(textOf(t)))).toBe(true)
+  }
+  expect(w.store.get('more:needs')).toBe(true)
+  expect(w.store.get('more:music')).toBe(true)
+  // the running ones have no card: quiet rows below the pipelines
+  const keys = (await ui.findAll({ type: 'Box' })).map(b => b.key).filter(Boolean)
+  expect(keys.indexOf('activity')).toBeGreaterThan(keys.indexOf('card-music'))
   await ui.unmount()
 })
 
