@@ -107,6 +107,13 @@ export function parseConversation(text: string): Conversation {
   }
 }
 
+// A question waiting longer than this folds into "older" in "for you" (an error never does).
+export const FRESH_ASK_MS = 24 * 3_600_000
+
+// The name a question goes by in "for you": the app's own title, else the question itself. A name
+// the mod made (the first prompt, "new conversation") says less than what the conversation asks.
+export const askName = (c: Conversation) => (c.isAppTitle || !c.ask ? c.title : c.ask)
+
 // How the card shows a conversation now: a "running" file nobody finished is done.
 export function shownState(c: Conversation, now: number): ConversationState {
   return c.state === 'running' && now - Date.parse(c.updated) > RUNNING_MS ? 'done' : c.state

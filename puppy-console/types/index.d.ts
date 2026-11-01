@@ -9,7 +9,9 @@ export type State = 'running' | 'idle' | 'waiting' | 'error'
 // fill: words the pane puts in the prompt box, for you to finish and send.
 export type WaitingAction = { label: string; open?: string; fill?: string }
 
-export type WaitingItem = { id: string; text: string; since?: string; actions?: WaitingAction[] }
+// group: the id of one of the file's waiting_groups (FORMAT.md, "waiting groups").
+export type WaitingItem = { id: string; text: string; since?: string; group?: string; actions?: WaitingAction[] }
+export type WaitingGroup = { id: string; label: string }
 
 export type Status = {
   format: 'pipeline-status'
@@ -23,6 +25,7 @@ export type Status = {
   headline: string
   progress?: { done: number; total: number | null; unit?: string } | null
   waiting?: WaitingItem[]
+  waiting_groups?: WaitingGroup[]
   last_output?: { label: string; at?: string; path?: string } | null
   next?: string | null
   detail?: { [key: string]: Json } | null
@@ -107,6 +110,10 @@ declare module 'claude-code' {
       isShowingOlder: boolean
       // the conversations card's "done" group is open
       isShowingDone: boolean
+      // "for you"'s "older" group of questions is open
+      isShowingOlderNeeds: boolean
+      // the waiting groups opened in "for you", by "<pipeline>:<group id>"
+      openGroups: Record<string, boolean>
       // this conversation's last write of its own file failed, and why
       writeError: string | null
       // what the last press of a waiting item's button did, or why it could not

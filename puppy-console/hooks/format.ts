@@ -1,5 +1,5 @@
 // Reading one status file (FORMAT.md). Pure functions, so the tests need no engine.
-import type { Snapshot, State, Status, WaitingAction } from '../types'
+import type { Snapshot, State, Status, WaitingAction, WaitingGroup, WaitingItem } from '../types'
 
 const STATES: readonly State[] = ['running', 'idle', 'waiting', 'error']
 
@@ -45,10 +45,45 @@ export function parseStatus(text: string): Status {
         id: str(w.id) || String(w.text ?? ''),
         text: String(w.text ?? ''),
         ...(typeof w.since === 'string' ? { since: w.since } : {}),
+        ...(str(w.group) ? { group: str(w.group) } : {}),
         ...(actions.length ? { actions } : {}),
       }
     }),
+    waiting_groups: parseGroups(v.waiting_groups),
   }
+}
+
+const MAX_GROUP_LABEL = 40
+
+// The names of a file's waiting groups. One without an id or a short label is dropped; its items
+// then show one by one, as if they had no group.
+function parseGroups(v: unknown): WaitingGroup[] {
+  if (!Array.isArray(v)) return []
+  return v.filter(isObject).flatMap(g => {
+    const id = typeof g.id === 'string' ? g.id.trim() : ''
+    const label = typeof g.label === 'string' ? g.label.trim() : ''
+    return id && label && [...label].length <= MAX_GROUP_LABEL ? [{ id, label }] : []
+  })
+}
+
+// What "for you" lists for one pipeline, in the file's order: the items of a named group of two
+// or more as one entry, where the group's first item stands; every other item on its own.
+export type WaitingEntry = { item: WaitingItem } | { group: WaitingGroup; items: WaitingItem[] }
+export function waitingEntries(s: Status): WaitingEntry[] {
+  const items = s.waiting ?? []
+  const named = new Map((s.waiting_groups ?? []).map(g => [g.id, g]))
+  const members = (id: string) => items.filter(w => w.group === id)
+  const out: WaitingEntry[] = []
+  const placed = new Set<string>()
+  for (const w of items) {
+    const group = w.group ? named.get(w.group) : undefined
+    if (!group || members(group.id).length < 2) out.push({ item: w })
+    else if (!placed.has(group.id)) {
+      placed.add(group.id)
+      out.push({ group, items: members(group.id) })
+    }
+  }
+  return out
 }
 
 export const MAX_ACTIONS = 3

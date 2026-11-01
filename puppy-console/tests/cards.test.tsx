@@ -31,6 +31,16 @@ test('a field of the wrong type is dropped, not fatal', () => {
   expect(picture(parseStatus(file({ detail: { batches: [{ name: 'x', strip: 5 }] } })), false)).toBeTruthy()
 })
 
+test('waiting groups: an odd group or a group name of the wrong type is dropped, never the item', () => {
+  const s = parseStatus(file({
+    waiting_groups: [{ id: 'final-review', label: '成片待審' }, { id: 'no-label' }, { label: 'no id' }, { id: 'long', label: 'x'.repeat(41) }, 'junk'],
+    waiting: [{ id: 'a', text: 'a', group: 'final-review' }, { id: 'b', text: 'b', group: 7 }],
+  }))
+  expect(s.waiting_groups).toEqual([{ id: 'final-review', label: '成片待審' }])
+  expect(s.waiting).toEqual([{ id: 'a', text: 'a', group: 'final-review' }, { id: 'b', text: 'b' }])
+  expect(parseStatus(file({ waiting_groups: 'x' })).waiting_groups).toEqual([])
+})
+
 test('a huge batch keeps its squares a size and the svg small', () => {
   for (const c of ['e', 'o']) {
     const pic = picture(parseStatus(file({ detail: { batches: [{ name: 'x', strip: c.repeat(5000) }] } })), false)!
