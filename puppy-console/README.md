@@ -20,10 +20,12 @@ the pipeline cards only read. each pipeline writes one small json file into a fo
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- the **for you** card comes first whenever anything waits, and is gone when nothing does. a conversation that asks you something shows its name, its recap and the question; you answer it in that conversation. a pipeline's waiting items show how long each has waited, and the buttons its status file gives them (`actions` in [FORMAT.md](FORMAT.md)):
+- the **for you** card comes first whenever anything waits, and is gone when nothing does. a conversation that asks you something shows its name and the question; you answer it in that conversation. a pipeline's waiting items show how long each has waited, and the buttons its status file gives them (`actions` in [FORMAT.md](FORMAT.md)):
   - a plain button opens a file or folder with your computer's own app (macOS `open`): the final video, a song, the folder of songs to hear. only pictures, videos, sounds, pdfs and folders, never an app or a script, checked again where the path really leads.
   - a button ending in `…` puts a sentence in this conversation's prompt box, after anything you already typed, for you to finish and send ("send ep04 back because …"). nothing is sent until you press enter.
   - one line under the card says what the last press did, or why it could not.
+  - a conversation shows its name and its question; one the app never named goes by its question. a question waiting more than a day folds into `▸ older N` (an error never does), still counted at the top.
+  - a pipeline can put items of one kind in a group (`waiting_groups` in [FORMAT.md](FORMAT.md)); the group is one line, `▸ review finals ×3`, that opens in place. the pane remembers what you opened.
 
 - the **conversations** card comes next. each conversation writes a short file about itself into `~/.claude/console/sessions/` when a turn starts and ends, and when it closes. that folder is on this computer only, never the status folder, so what you typed is not synced anywhere: its name (the app's own title, as the sidebar shows it; before the app has named it, the first thing you typed in it, an attached file by its file name, not its path), the folder it runs in, and the recap the desktop app's next-step box shows (in the terminal, the answer's first line, without markdown).
   - the ones that ask you something are in the **for you** card above; this card counts them. running ones get one quiet line each; done ones fold into `▸ done N`.

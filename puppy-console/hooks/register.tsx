@@ -1,11 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Conversation, Problem, Snapshot, Status, WaitingAction } from '../types'
+import type { Conversation, Problem, Snapshot, Status, WaitingAction, WaitingItem } from '../types'
 import { cut, detailLines, MASCOT_SCALE, mascot, picture, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks, unknownStages } from './draw'
 import type { Mood } from './draw'
-import { ago, alerts, expandHome, isFolded, isOpenable, isStale, markOf, parseStatus, quietWhy, sortCards, splitCards, textBar, titleOf, toggleFold } from './format'
-import { folderName, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
+import { ago, alerts, expandHome, isFolded, isOpenable, isStale, markOf, parseStatus, quietWhy, sortCards, splitCards, textBar, titleOf, toggleFold, waitingEntries } from './format'
+import { askName, folderName, FRESH_ASK_MS, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
 
 const PANE = 'puppy-console'
 const REFRESH_MS = 60_000
@@ -22,11 +22,16 @@ const snapshot = atom({ plugin: 'puppy-console', key: 'snapshot' } as const, nul
 const folds = atom({ plugin: 'puppy-console', key: 'folds' } as const, {} as Record<string, boolean>)
 const isShowingOlder = atom({ plugin: 'puppy-console', key: 'isShowingOlder' } as const, false)
 const isShowingDone = atom({ plugin: 'puppy-console', key: 'isShowingDone' } as const, false)
+const isShowingOlderNeeds = atom({ plugin: 'puppy-console', key: 'isShowingOlderNeeds' } as const, false)
+// The waiting groups opened in "for you", by "<pipeline>:<group id>"; closed is the default.
+const openGroups = atom({ plugin: 'puppy-console', key: 'openGroups' } as const, {} as Record<string, boolean>)
 const writeError = atom({ plugin: 'puppy-console', key: 'writeError' } as const, null as string | null)
 const actionNote = atom({ plugin: 'puppy-console', key: 'actionNote' } as const, null as { text: string; isError: boolean } | null)
 const FOLD = 'fold:'
 const SHOWING_OLDER = 'isShowingOlder'
 const SHOWING_DONE = 'isShowingDone'
+const SHOWING_OLDER_NEEDS = 'isShowingOlderNeeds'
+const GROUP = 'group:'
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
@@ -195,16 +200,22 @@ function refresh($: EngineInterface, setting: string, isNotifying: boolean, isSh
 async function loadFolds($: EngineInterface): Promise<void> {
   try {
     const kept: Record<string, boolean> = {}
+    const opened: Record<string, boolean> = {}
     for (const key of await $.store.keys()) {
-      if (!key.startsWith(FOLD)) continue
+      if (!key.startsWith(FOLD) && !key.startsWith(GROUP)) continue
       const v = await $.store.get(key)
-      if (typeof v === 'boolean') kept[key.slice(FOLD.length)] = v
+      if (typeof v !== 'boolean') continue
+      if (key.startsWith(FOLD)) kept[key.slice(FOLD.length)] = v
+      else if (v) opened[key.slice(GROUP.length)] = true
     }
     const showing = (await $.store.get(SHOWING_OLDER)) === true
     const showingDone = (await $.store.get(SHOWING_DONE)) === true
+    const showingOlderNeeds = (await $.store.get(SHOWING_OLDER_NEEDS)) === true
     await update($, folds, () => kept)
+    await update($, openGroups, () => opened)
     await update($, isShowingOlder, () => showing)
     await update($, isShowingDone, () => showingDone)
+    await update($, isShowingOlderNeeds, () => showingOlderNeeds)
   } catch {
     // nothing kept yet, or no store here: the defaults
   }
@@ -224,6 +235,20 @@ async function pressOlder($: EngineInterface): Promise<void> {
 async function pressDone($: EngineInterface): Promise<void> {
   const next = await update($, isShowingDone, was => !was)
   await $.store.set(SHOWING_DONE, next).catch(() => {})
+}
+
+async function pressOlderNeeds($: EngineInterface): Promise<void> {
+  const next = await update($, isShowingOlderNeeds, was => !was)
+  await $.store.set(SHOWING_OLDER_NEEDS, next).catch(() => {})
+}
+
+// Opened, a group is kept by its pipeline and id, so the minute's read and a restart keep it open.
+async function pressGroup($: EngineInterface, key: string): Promise<void> {
+  const next = await update($, openGroups, was => {
+    const { [key]: isOpen, ...rest } = was
+    return isOpen ? rest : { ...rest, [key]: true }
+  })
+  await (next[key] ? $.store.set(`${GROUP}${key}`, true) : $.store.delete(`${GROUP}${key}`)).catch(() => {})
 }
 
 // A waiting item's button. open shows a file or folder with the system's own app (macOS
@@ -413,6 +438,8 @@ export const register: Register = (on, options) => {
     const folded = await read($, folds)
     const isShowingOlderCards = await read($, isShowingOlder)
     const isShowingDoneList = await read($, isShowingDone)
+    const isShowingOlderNeedList = await read($, isShowingOlderNeeds)
+    const opened = await read($, openGroups)
     const ownWriteError = await read($, writeError)
     const note = await read($, actionNote)
     if (!snap) return <Text dimColor>loading…</Text>
@@ -487,8 +514,8 @@ export const register: Register = (on, options) => {
     const since = (c: Conversation) => `${c.project ? `${c.project} · ` : ''}${ago(now - Date.parse(c.updated))}`
     const line = (text: string) => (isTerminal ? cut(text, cardColumns) : text)
     // One row: the name gives way, the facts on the right never wrap (STYLE.md, long text).
-    const row = (c: Conversation, facts: string, isDim: boolean) => {
-      const name = isTerminal ? cut(c.title, Math.max(8, cardColumns - facts.length - 3)) : c.title
+    const row = (c: Conversation, facts: string, isDim: boolean, title = c.title) => {
+      const name = isTerminal ? cut(title, Math.max(8, cardColumns - facts.length - 3)) : title
       return (
         <Box key={`c:${c.id}`} flexDirection="row" gap={1}>
           <Box flexShrink={1} minWidth={0}>
@@ -501,13 +528,48 @@ export const register: Register = (on, options) => {
       )
     }
 
+    // A question in "for you": its name, then what it asks. One the app never named goes by its
+    // question, said once and whole (a row would cut it), like a pipeline's item. The recap stays
+    // in the conversation.
+    const need = (c: Conversation) => {
+      const name = askName(c)
+      if (c.ask && name === c.ask && c.state !== 'error')
+        return <Text key={`need:${c.id}`}><Text color="warning">→</Text> {c.ask}<Text dimColor> · {since(c)}</Text></Text>
+      return (
+        <Box key={`need:${c.id}`} flexDirection="column">
+          {row(c, since(c), false, name)}
+          {c.state === 'error'
+            ? <Text><Text color="error">error</Text><Text dimColor> · the last turn ended on an error</Text></Text>
+            : c.ask && <Text><Text color="warning">→</Text> {c.ask}</Text>}
+        </Box>
+      )
+    }
+    const waitedFor = (since?: string) => (since && !Number.isNaN(Date.parse(since)) ? ago(now - Date.parse(since)).replace(' ago', '') : null)
+    const item = (s: Status, w: WaitingItem) => (
+      <Box key={`item:${s.pipeline}:${w.id}`} flexDirection="column">
+        <Text>· {w.text}{waitedFor(w.since) ? <Text dimColor> · {waitedFor(w.since)}</Text> : null}</Text>
+        {(w.actions ?? []).length > 0 && (
+          <Box flexDirection="row" gap={1} paddingLeft={2}>
+            {(w.actions ?? []).map((a, i) => (
+              <Button key={`act:${s.pipeline}:${w.id}:${i}`} label={a.fill != null ? `${a.label}…` : a.label} onPress={() => pressAction($, a)} />
+            ))}
+          </Box>
+        )}
+      </Box>
+    )
+
     // First, when anything waits: everything that waits for you, in one place. The conversations
     // that ask you something (answered in that conversation), then each pipeline's waiting items,
     // with the buttons its status file gives them (open a file, start a message in the prompt box).
+    // A question older than a day folds behind "▸ older N"; a pipeline's named group of items
+    // folds into one line that opens in place.
     const forYouCard = (needs: Conversation[], cards: Status[]) => {
       const waitingCards = cards.filter(s => (s.waiting ?? []).length > 0)
       const count = needs.length + waitingCards.reduce((n, s) => n + (s.waiting ?? []).length, 0)
       if (count === 0) return null
+      const isFresh = (c: Conversation) => c.state === 'error' || now - Date.parse(c.updated) <= FRESH_ASK_MS
+      const fresh = needs.filter(isFresh)
+      const older = needs.filter(c => !isFresh(c))
       return (
         <Box key="card-for-you" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
           <Box flexDirection="row" justifyContent="space-between">
@@ -519,37 +581,42 @@ export const register: Register = (on, options) => {
               <Text dimColor>conversations</Text>
               {/* the terminal has no "xs" gap, so a blank row keeps one conversation from running into the next */}
               <Box key="needs" flexDirection="column" gap={isTerminal ? 1 : 'xs'}>
-                {needs.slice(0, MAX_NEEDS).map(c => (
-                  <Box key={`need:${c.id}`} flexDirection="column">
-                    {row(c, since(c), false)}
-                    {c.recap && <Text dimColor wrap="truncate-end">{line(c.recap)}</Text>}
-                    {c.state === 'error'
-                      ? <Text><Text color="error">error</Text><Text dimColor> · the last turn ended on an error</Text></Text>
-                      : c.ask && <Text><Text color="warning">→</Text> {c.ask}</Text>}
-                  </Box>
-                ))}
+                {fresh.slice(0, MAX_NEEDS).map(need)}
               </Box>
-              {needs.length > MAX_NEEDS && <Text dimColor>and {needs.length - MAX_NEEDS} more waiting</Text>}
+              {fresh.length > MAX_NEEDS && <Text dimColor>and {fresh.length - MAX_NEEDS} more waiting</Text>}
+              {older.length > 0 && (
+                <Box key="older-needs" flexDirection="column" gap={isTerminal ? 1 : 'xs'}>
+                  <Button key="show-older-needs" label={`${isShowingOlderNeedList ? '▾' : '▸'} older ${older.length}`} dimColor onPress={() => pressOlderNeeds($)} />
+                  {isShowingOlderNeedList && older.map(need)}
+                </Box>
+              )}
             </Box>
           )}
           {waitingCards.map(s => {
-            const items = s.waiting ?? []
+            const entries = waitingEntries(s)
+            const shown = entries.slice(0, MAX_ITEMS)
+            const hidden = entries.slice(MAX_ITEMS).reduce((n, e) => n + ('item' in e ? 1 : e.items.length), 0)
             return (
               <Box key={`for-${s.pipeline}`} flexDirection="column">
                 <Text dimColor>{titleOf(s)}</Text>
-                {items.slice(0, MAX_ITEMS).map(w => (
-                  <Box key={`item:${s.pipeline}:${w.id}`} flexDirection="column">
-                    <Text>· {w.text}{w.since && !Number.isNaN(Date.parse(w.since)) ? <Text dimColor> · {ago(now - Date.parse(w.since)).replace(' ago', '')}</Text> : null}</Text>
-                    {(w.actions ?? []).length > 0 && (
-                      <Box flexDirection="row" gap={1} paddingLeft={2}>
-                        {(w.actions ?? []).map((a, i) => (
-                          <Button key={`act:${s.pipeline}:${w.id}:${i}`} label={a.fill != null ? `${a.label}…` : a.label} onPress={() => pressAction($, a)} />
-                        ))}
-                      </Box>
-                    )}
-                  </Box>
-                ))}
-                {items.length > MAX_ITEMS && <Text dimColor>· and {items.length - MAX_ITEMS} more</Text>}
+                {shown.map(e => {
+                  if ('item' in e) return item(s, e.item)
+                  const key = `${s.pipeline}:${e.group.id}`
+                  const isOpen = opened[key] === true
+                  // by time, not as text: the times may be written in different offsets
+                  const oldest = e.items.map(w => w.since).filter(t => t && !Number.isNaN(Date.parse(t))).sort((a, b) => Date.parse(a!) - Date.parse(b!))[0]
+                  return (
+                    <Box key={`grp:${key}`} flexDirection="column">
+                      <Button key={`group:${key}`} plain label={`${isOpen ? '▾' : '▸'} ${e.group.label} ×${e.items.length}${oldest ? ` · ${waitedFor(oldest)}` : ''}`} onPress={() => pressGroup($, key)} />
+                      {isOpen && (
+                        <Box flexDirection="column" paddingLeft={2}>
+                          {e.items.map(w => item(s, w))}
+                        </Box>
+                      )}
+                    </Box>
+                  )
+                })}
+                {hidden > 0 && <Text dimColor>· and {hidden} more</Text>}
               </Box>
             )
           })}

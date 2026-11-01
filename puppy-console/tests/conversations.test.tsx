@@ -97,7 +97,7 @@ const entry = (name: string, kind: 'file' | 'dir' = 'file') => ({ name, kind, si
 
 test('the conversations card comes first, with what each one asks', { options: { status_dir: '/s' } }, async ($, on) => {
   const files: Record<string, string> = {
-    '/home/me/.claude/console/sessions/a.json': conv({ id: 'a', state: 'waiting', title: 'console sessions', recap: 'Card added.', ask: 'Open a PR?' }),
+    '/home/me/.claude/console/sessions/a.json': conv({ id: 'a', state: 'waiting', isAppTitle: true, title: 'console sessions', recap: 'Card added.', ask: 'Open a PR?' }),
     '/home/me/.claude/console/sessions/b.json': conv({ id: 'b', state: 'done', title: 'fix the bowl' }),
     '/home/me/.claude/console/sessions/c.json': conv({ id: 'x' }),   // name and id disagree: left out
     '/s/music.json': JSON.stringify({ format: 'pipeline-status', version: 1, pipeline: 'music', updated: new Date(T).toISOString(), state: 'waiting', headline: '05 · 42/70' }),
@@ -128,7 +128,7 @@ test('the conversations card comes first, with what each one asks', { options: {
     if (surface === 'desktop') expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('the puppy sitting')
     else expect(texts.some(t => /ᴥ/.test(t ?? ''))).toBe(false)
     expect(texts.some(t => /→\s*Open a PR\?/.test(t ?? ''))).toBe(true)
-    expect(texts).toContain('Card added.')
+    expect(texts).not.toContain('Card added.')
     // done ones fold behind "▸ done 1" until opened
     expect(texts.some(t => /fix the bowl/.test(t ?? ''))).toBe(false)
     expect((await ui.find({ key: 'show-done' }))?.text).toMatch(/^▸ done 1/)

@@ -42,7 +42,8 @@ every pipeline writes one small json file into one shared folder. the mod reads 
 | `state` | yes | `running` (working now), `idle` (nothing to do), `waiting` (stopped until you do something), `error` (stopped by a problem) |
 | `headline` | yes | one short line: what it is doing now |
 | `progress` | no | `{ done, total, unit }` for a progress bar; `total` can be `null` when there is no end |
-| `waiting` | no | things only you can do (listen, approve, drop a file in). `id` stays the same while the item waits, so a later to-do or button can point at it. `since` is when it began to wait. `actions` gives it buttons, below |
+| `waiting` | no | things only you can do (listen, approve, drop a file in). `id` stays the same while the item waits, so a later to-do or button can point at it. `since` is when it began to wait. `group` puts it in one of `waiting_groups`. `actions` gives it buttons, below |
+| `waiting_groups` | no | names for kinds of waiting items, `[{ id, label }]`, below |
 | `last_output` | no | the newest thing it made: `{ label, at, path? }` |
 | `next` | no | the next step, in words |
 | `detail` | no | anything the pipeline wants to show more of. the mod draws a few known ones (below); for others it shows nothing extra |
@@ -55,6 +56,20 @@ an item in `waiting` can carry up to three buttons, `actions: [{ label, open | f
 - `fill`: at most 500 characters the pane puts in the prompt box of the conversation the pane is in, after anything already typed there. it sends nothing: you finish the words and press enter. write it so claude knows what to do without the card, for example `"in ai-video-pipeline, send baibai/ep04 back to compose because: "`.
 
 an action that breaks a rule is left out, like any field of the wrong type; the item still shows.
+
+## waiting groups
+
+when a pipeline has several items of one kind (three finals to review), it can name the kind once and point its items at it, so **for you** shows them as one line, `▸ review finals ×3 · 24h` (the oldest one's wait), that opens in place to each item and its buttons:
+
+```json
+"waiting_groups": [{ "id": "final-review", "label": "成片待審" }],
+"waiting": [{ "id": "final-ep04", "text": "看過成片，approve baibai/ep04 final", "group": "final-review" }, …]
+```
+
+- `id` is what items point at with `group`, and what the pane remembers an opened group by; keep it the same. `label` is the words on the line, at most 40 characters, in the pipeline's own words.
+- the pipeline decides the group where it makes the item. the pane never guesses a kind from an item's words.
+- a group is only how it shows: each item keeps its own id and buttons, and still counts on its own.
+- a group with one item, an item whose `group` is not in `waiting_groups`, and a group without an id or a label: the item shows on its own, as if it had no group.
 
 ## writing it
 

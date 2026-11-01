@@ -367,7 +367,7 @@ test('no conversations yet: the card says so', { options: { status_dir: '/s' } }
 
 test('on the terminal a conversation row is cut to the card, and waiting ones stand apart', { options: { status_dir: '/s' } }, async ($, on) => {
   const { w } = world(on, {})
-  w.sessions['a.json'] = conversation({ id: 'a', title: '這是一個很長很長的對話名稱'.repeat(4), recap: 'r'.repeat(200) })
+  w.sessions['a.json'] = conversation({ id: 'a', isAppTitle: true, title: '這是一個很長很長的對話名稱'.repeat(4), recap: 'r'.repeat(200) })
   w.sessions['b.json'] = conversation({ id: 'b', title: 'second', updated: at(120_000) })
   w.sessions['c.json'] = conversation({ id: 'c', title: 'busy', state: 'running', ask: null })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -378,7 +378,8 @@ test('on the terminal a conversation row is cut to the card, and waiting ones st
   const name = texts.find(t => t.startsWith('這是'))!
   expect(name.endsWith('…')).toBe(true)
   expect(width(name) + 1 + width('1m ago')).toBeLessThanOrEqual(56)
-  expect(texts.find(t => t.startsWith('rrr'))!.length).toBeLessThanOrEqual(56)
+  // the recap is in the conversation, not in "for you"
+  expect(texts.some(t => t.startsWith('rrr'))).toBe(false)
   expect(texts.some(t => t === '· busy')).toBe(true)
   await ui.unmount()
 })
@@ -413,7 +414,7 @@ test('on the terminal the waiting conversations have a blank row between them', 
 
 test('a conversation file that does not parse is named, and its last read still shows', { options: { status_dir: '/s' } }, async ($, on) => {
   const { w, clock } = world(on, {})
-  w.sessions['a.json'] = conversation({ id: 'a', title: 'console sessions' })
+  w.sessions['a.json'] = conversation({ id: 'a', isAppTitle: true, title: 'console sessions' })
   w.sessions['b.json'] = '{"format": "session-st'
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.command.run(RUN)
@@ -457,6 +458,136 @@ test('"for you" comes first: the asking conversations, then each pipeline\'s wai
     expect((await ui.find({ key: 'act:ai-video:f:1' }))?.text).toBe('send back…')
     await ui.unmount()
   }
+})
+
+// Shaped like the person's real files on 11/1: an app-named conversation with a long recap, and
+// one the app never named (its title is the "new conversation" fallback).
+const asking = {
+  'a.json': conversation({ id: 'a', isAppTitle: true, title: '產線程式健檢，寫 SPEC', recap: '已經查完 youtube 的授權，token 七天會過期，所以每週要重新登入一次。', ask: '你跑完 --reauth 之後，要我更新 README 嗎？' }),
+  'b.json': conversation({ id: 'b', title: 'new conversation', recap: '10/29 的兩張圖還沒發布。', ask: '要發嗎？' }),
+}
+
+for (const surface of ['terminal', 'desktop'] as const)
+test(`"for you" gives each question two lines at most; one the app never named goes by its question (${surface})`, { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w } = world(on, {})
+  Object.assign(w.sessions, asking)
+  await $.session.start({ cwd: '/', surface, isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface })
+  const forYou = textOf(await ui.find({ key: 'card-for-you' }))
+  expect(forYou).toMatch(/產線程式健檢，寫 SPEC/)
+  expect(forYou).toMatch(/→ 你跑完 --reauth/)
+  expect(forYou).toMatch(/要發嗎？/)
+  // the recap is in the conversation; a name the app never gave says nothing
+  expect(forYou).not.toMatch(/token 七天/)
+  expect(forYou).not.toMatch(/new conversation/)
+  // its question is its name, so it is not said twice
+  expect(forYou.match(/要發嗎？/g)).toHaveLength(1)
+  await ui.unmount()
+})
+
+for (const surface of ['terminal', 'desktop'] as const)
+test(`a long question that stands as the name is shown whole (${surface})`, { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w } = world(on, {})
+  const ask = '所有測試已經通過而且變更都已整理完成，現在要部署到正式環境，還是先部署到測試環境？'
+  w.sessions['a.json'] = conversation({ id: 'a', title: 'new conversation', project: 'puppy-mods', ask })
+  await $.session.start({ cwd: '/', surface, isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, props: rows(40, 60), surface })
+  const shown = (await ui.findAll({ type: 'Text' })).filter(t => textOf(t).includes(ask))
+  expect(shown.length).toBeGreaterThan(0)
+  // not cut on the terminal, not cut at the edge on the desktop
+  expect(shown.some(t => textOf(t).includes('…') || t.props.wrap === 'truncate-end')).toBe(false)
+  await ui.unmount()
+})
+
+test('a question waiting more than a day folds into "older" in "for you"; an error never does', { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w } = world(on, {})
+  w.sessions['new.json'] = conversation({ id: 'new', isAppTitle: true, title: 'today', ask: 'Ship it?' })
+  w.sessions['old.json'] = conversation({ id: 'old', isAppTitle: true, title: 'old one', ask: 'Merge?', updated: at(3 * DAY) })
+  w.sessions['err.json'] = conversation({ id: 'err', isAppTitle: true, title: 'broke', state: 'error', ask: null, updated: at(3 * DAY) })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    const forYou = textOf(await ui.find({ key: 'card-for-you' }))
+    expect(forYou).toMatch(/3 waiting/)
+    expect(forYou).toMatch(/Ship it\?/)
+    expect(forYou).toMatch(/broke/)
+    expect(forYou).not.toMatch(/Merge\?/)
+    expect((await ui.find({ key: 'show-older-needs' }))?.text).toMatch(/^▸ older 1/)
+    await ui.unmount()
+  }
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'show-older-needs' })
+  expect(textOf(await ui.find({ key: 'card-for-you' }))).toMatch(/Merge\?/)
+  expect(w.store.get('isShowingOlderNeeds')).toBe(true)
+  await ui.unmount()
+})
+
+const FINAL = (job: string) => [
+  { label: '打開成片資料夾', open: `/v/${job}/out/` },
+  { label: '核准', fill: `approve baibai/${job} final` },
+]
+
+test('a pipeline\'s items in one group fold into one line; ungrouped, unknown and lone ones show as before', { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w, clock } = world(on, {
+    'ai-video.json': status({
+      pipeline: 'ai-video', state: 'waiting', headline: '4 open',
+      waiting_groups: [{ id: 'final-review', label: '成片待審' }, { id: 'clip-input', label: '放素材' }],
+      waiting: [
+        { id: 'f1', text: '看過成片，approve baibai/ep04 final', group: 'final-review', since: at(DAY), actions: FINAL('ep04') },
+        { id: 'i1', text: '把鏡頭放進 inbox/', group: 'clip-input', actions: [{ label: '打開 inbox', open: '/v/senpai01/inbox/' }] },
+        { id: 'f2', text: '看過成片，approve baibai/指令 final', group: 'final-review', since: at(3_600_000), actions: FINAL('指令') },
+        { id: 'f3', text: '看過成片，approve baibai/手勢 final', group: 'final-review', actions: FINAL('手勢') },
+        { id: 'x1', text: 'a group nobody named', group: 'nope' },
+      ],
+    }),
+  })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    const forYou = textOf(await ui.find({ key: 'card-for-you' }))
+    // every item still counts
+    expect(forYou).toMatch(/5 waiting/)
+    expect((await ui.find({ key: 'group:ai-video:final-review' }))?.text).toMatch(/^▸ 成片待審 ×3 · 24h/)
+    expect(forYou).not.toMatch(/approve baibai\/ep04/)
+    expect(await ui.find({ key: 'act:ai-video:f1:0' })).toBeFalsy()
+    // a group of one, and a group the file never named, show their item as before
+    expect(forYou).toMatch(/把鏡頭放進 inbox\//)
+    expect((await ui.find({ key: 'act:ai-video:i1:0' }))?.text).toBe('打開 inbox')
+    expect(forYou).toMatch(/a group nobody named/)
+    await ui.unmount()
+  }
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'group:ai-video:final-review' })
+  expect(textOf(await ui.find({ key: 'card-for-you' }))).toMatch(/approve baibai\/ep04/)
+  expect((await ui.find({ key: 'act:ai-video:f3:1' }))?.text).toBe('核准…')
+  expect(w.store.get('group:ai-video:final-review')).toBe(true)
+  // the minute's read keeps it open
+  await clock.advance(60_000)
+  expect(await ui.find({ key: 'act:ai-video:f3:1' })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('a group\'s wait is its oldest item by time, whatever offset each time is written in', { options: { status_dir: '/s' } }, async ($, on) => {
+  // T is 04:00 UTC: 02:00Z waited 2h, 09:00+08:00 (01:00Z) waited 3h, though it sorts later as text
+  world(on, {
+    'ai-video.json': status({
+      pipeline: 'ai-video', state: 'waiting', headline: '2 open',
+      waiting_groups: [{ id: 'final-review', label: '成片待審' }],
+      waiting: [
+        { id: 'f1', text: 'a', group: 'final-review', since: '2026-10-28T02:00:00Z' },
+        { id: 'f2', text: 'b', group: 'final-review', since: '2026-10-28T09:00:00+08:00' },
+      ],
+    }),
+  })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ key: 'group:ai-video:final-review' }))?.text).toMatch(/· 3h$/)
+  await ui.unmount()
 })
 
 test('nothing waits: no "for you" card', { options: { status_dir: '/s' } }, async ($, on) => {
