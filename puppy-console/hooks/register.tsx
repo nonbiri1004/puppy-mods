@@ -529,15 +529,18 @@ export const register: Register = (on, options) => {
     }
 
     // A question in "for you": its name, then what it asks. One the app never named goes by its
-    // question, said once. The recap stays in the conversation.
+    // question, said once and whole (a row would cut it), like a pipeline's item. The recap stays
+    // in the conversation.
     const need = (c: Conversation) => {
       const name = askName(c)
+      if (c.ask && name === c.ask && c.state !== 'error')
+        return <Text key={`need:${c.id}`}><Text color="warning">→</Text> {c.ask}<Text dimColor> · {since(c)}</Text></Text>
       return (
         <Box key={`need:${c.id}`} flexDirection="column">
           {row(c, since(c), false, name)}
           {c.state === 'error'
             ? <Text><Text color="error">error</Text><Text dimColor> · the last turn ended on an error</Text></Text>
-            : c.ask && name !== c.ask && <Text><Text color="warning">→</Text> {c.ask}</Text>}
+            : c.ask && <Text><Text color="warning">→</Text> {c.ask}</Text>}
         </Box>
       )
     }

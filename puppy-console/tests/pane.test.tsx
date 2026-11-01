@@ -486,6 +486,21 @@ test(`"for you" gives each question two lines at most; one the app never named g
   await ui.unmount()
 })
 
+for (const surface of ['terminal', 'desktop'] as const)
+test(`a long question that stands as the name is shown whole (${surface})`, { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w } = world(on, {})
+  const ask = '所有測試已經通過而且變更都已整理完成，現在要部署到正式環境，還是先部署到測試環境？'
+  w.sessions['a.json'] = conversation({ id: 'a', title: 'new conversation', project: 'puppy-mods', ask })
+  await $.session.start({ cwd: '/', surface, isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, props: rows(40, 60), surface })
+  const shown = (await ui.findAll({ type: 'Text' })).filter(t => textOf(t).includes(ask))
+  expect(shown.length).toBeGreaterThan(0)
+  // not cut on the terminal, not cut at the edge on the desktop
+  expect(shown.some(t => textOf(t).includes('…') || t.props.wrap === 'truncate-end')).toBe(false)
+  await ui.unmount()
+})
+
 test('a question waiting more than a day folds into "older" in "for you"; an error never does', { options: { status_dir: '/s' } }, async ($, on) => {
   const { w } = world(on, {})
   w.sessions['new.json'] = conversation({ id: 'new', isAppTitle: true, title: 'today', ask: 'Ship it?' })
