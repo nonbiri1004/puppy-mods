@@ -18,6 +18,8 @@ function conversation(on: On) {
     pushes: [] as string[],
     verdict: 'allow' as 'allow' | 'ask' | 'deny',
     isWriteBroken: false,
+    // what the transcript holds when the file is first written
+    messages: [user('add the card')],
     // while set, a write waits for it: the queue is held
     gate: null as Promise<void> | null,
   }
@@ -37,7 +39,7 @@ function conversation(on: On) {
   })
   on('session.id', () => ({ value: w.id }))
   on('session.repo', () => ({ value: null as never }))
-  on('session.messages', () => ({ value: [user('add the card')] as never }))
+  on('session.messages', () => ({ value: w.messages as never }))
   on('tool.check', () => ({ decision: w.verdict }) as never)
   on('tool.call', (_, e) => {
     const call = e as unknown as { tool: string; message?: string }
@@ -121,6 +123,36 @@ test('a fork is marked, never pushed, and its first turn keeps its own title', a
   await clock.settle()
   expect(file()).toMatchObject({ isFork: true, state: 'waiting', title: 'btw: 是指那個refresh嗎' })
   expect(w.pushes).toEqual([])
+})
+
+// What the desktop app really does for a side chat (read off its transcripts): it copies the
+// other conversation's messages into a new session that does not start as a fork, names it
+// "Side chat", then "btw: <the question>".
+const copied = [user('@"/Users/me/Library/Messages/Attachments/b9/09/1EBA/平假名配圖總表_A4.pdf"\n\n<pasted_content id="33be">\nそれなら…\n</pasted_content>'), user('ラーメンの教材にして')]
+
+test('a side chat is marked by the app\'s name for it, not only by a fork, and never pushed', async ($, on) => {
+  const { w, clock, file } = conversation(on)
+  w.id = 's1'
+  w.messages = [...copied, user('評分的是誰')]
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.classic.SessionStart({ source: 'resume', session_id: 's1', session_title: 'Side chat' })
+  await $.classic.UserPromptSubmit({ prompt: '評分的是誰', session_id: 's1', session_title: 'btw: 評分的是誰' })
+  await $.turn.start({ text: '評分的是誰', turnId: 't1' })
+  await $.tool.call(wrapUpCall({ recap: 'The judge model.', ask: 'Change it?' }) as never)
+  await $.turn.complete(answer('t1'))
+  await clock.settle()
+  expect(file()).toMatchObject({ isFork: true, state: 'waiting', title: 'btw: 評分的是誰' })
+  expect(w.pushes).toEqual([])
+})
+
+test('a conversation on copied messages is named by its own prompt, never the copied first one', async ($, on) => {
+  const { w, clock, file } = conversation(on)
+  w.id = 's2'
+  w.messages = [...copied, user('不過之前其他對話我也沒有看過這個')]
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.turn.start({ text: '不過之前其他對話我也沒有看過這個', turnId: 't1' })
+  await clock.settle()
+  expect(file().title).toBe('不過之前其他對話我也沒有看過這個')
 })
 
 test('the session ends: a running turn is done; an exit keeps the question, a /clear drops it', async ($, on) => {

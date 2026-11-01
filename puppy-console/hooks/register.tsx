@@ -5,7 +5,7 @@ import type { Conversation, Problem, Snapshot, Status, WaitingAction } from '../
 import { cut, detailLines, MASCOT_SCALE, mascot, picture, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks, unknownStages } from './draw'
 import type { Mood } from './draw'
 import { ago, alerts, expandHome, isFolded, isOpenable, isStale, markOf, parseStatus, quietWhy, sortCards, splitCards, textBar, titleOf, toggleFold } from './format'
-import { folderName, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plain, plainLine, recent, SESSIONS, shownState, wrapOf } from './sessions'
+import { folderName, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
 
 const PANE = 'puppy-console'
 const REFRESH_MS = 60_000
@@ -124,10 +124,11 @@ function save($: EngineInterface, change: (c: Conversation) => Conversation, pro
         // the repository's name (a worktree's main checkout), not the folder: no "console-sessions"
         // for a worktree, no home folder's name for a conversation outside any repository
         const [messages, repo] = await Promise.all([$.session.messages().catch(() => []), $.session.repo().catch(() => null)])
-        const title = nameOf(messages)
         own = {
           format: 'session-status', version: 1, id, updated: '', state: 'running',
-          title: title === 'new conversation' && plain(prompt) ? oneLine(plain(prompt), 60) : title,
+          // this turn's prompt first: a side chat or a fork starts on a copy of another
+          // conversation's messages, whose first prompt is that one's
+          title: promptName(prompt) || nameOf(messages),
           project: repo ? folderName(repo.root) : undefined, recap: '', ask: null,
         }
       }
@@ -137,7 +138,7 @@ function save($: EngineInterface, change: (c: Conversation) => Conversation, pro
       ...own,
       updated: new Date(now).toISOString(),
       ...(appTitle ? { title: oneLine(appTitle, 80), isAppTitle: true as const } : {}),
-      ...(forks.has(id) ? { isFork: true as const } : {}),
+      ...(forks.has(id) || (appTitle && isSideChatTitle(appTitle)) ? { isFork: true as const } : {}),
     })
     await $.fs.write(path, `${JSON.stringify(own, null, 2)}\n`)
     await update($, writeError, () => null)
