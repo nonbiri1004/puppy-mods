@@ -603,7 +603,8 @@ export const register: Register = (on, options) => {
                   if ('item' in e) return item(s, e.item)
                   const key = `${s.pipeline}:${e.group.id}`
                   const isOpen = opened[key] === true
-                  const oldest = e.items.map(w => w.since).filter(t => t && !Number.isNaN(Date.parse(t))).sort()[0]
+                  // by time, not as text: the times may be written in different offsets
+                  const oldest = e.items.map(w => w.since).filter(t => t && !Number.isNaN(Date.parse(t))).sort((a, b) => Date.parse(a!) - Date.parse(b!))[0]
                   return (
                     <Box key={`grp:${key}`} flexDirection="column">
                       <Button key={`group:${key}`} plain label={`${isOpen ? '▾' : '▸'} ${e.group.label} ×${e.items.length}${oldest ? ` · ${waitedFor(oldest)}` : ''}`} onPress={() => pressGroup($, key)} />

@@ -571,6 +571,25 @@ test('a pipeline\'s items in one group fold into one line; ungrouped, unknown an
   await ui.unmount()
 })
 
+test('a group\'s wait is its oldest item by time, whatever offset each time is written in', { options: { status_dir: '/s' } }, async ($, on) => {
+  // T is 04:00 UTC: 02:00Z waited 2h, 09:00+08:00 (01:00Z) waited 3h, though it sorts later as text
+  world(on, {
+    'ai-video.json': status({
+      pipeline: 'ai-video', state: 'waiting', headline: '2 open',
+      waiting_groups: [{ id: 'final-review', label: '成片待審' }],
+      waiting: [
+        { id: 'f1', text: 'a', group: 'final-review', since: '2026-10-28T02:00:00Z' },
+        { id: 'f2', text: 'b', group: 'final-review', since: '2026-10-28T09:00:00+08:00' },
+      ],
+    }),
+  })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ key: 'group:ai-video:final-review' }))?.text).toMatch(/· 3h$/)
+  await ui.unmount()
+})
+
 test('nothing waits: no "for you" card', { options: { status_dir: '/s' } }, async ($, on) => {
   world(on, { 'music.json': status({}) })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
