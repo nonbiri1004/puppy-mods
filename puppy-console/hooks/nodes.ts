@@ -16,6 +16,8 @@ export type Flow = {
   pipeline: string
   // 影片 · ep04
   title: string
+  // the mod knows this pipeline's steps (ai-video, music); without them the card stands alone
+  hasSteps: boolean
   // the steps before the gate (all of them, when nothing waits), and the ones after it
   before: FlowNode[]
   gate: Gate | null
@@ -78,10 +80,10 @@ export function flowOf(s: Status, now: number): Flow {
   const mark = markOf(s, now)
   const since = (t?: string) => (t && !Number.isNaN(Date.parse(t)) ? waited(now - Date.parse(t)) : '')
   let gate: Gate | null = null
-  if (s.state === 'error') gate = { label: '停下來了', isError: true, waited: since(s.updated), note: s.headline, items }
+  if (s.state === 'error') gate = { label: known ? '停下來了' : name, isError: true, waited: since(s.updated), note: s.headline, items }
   else if (items.length || s.state === 'waiting') {
     const at = known?.nodes.find(n => n.state === 'waiting')
-    gate = { label: at?.label ?? '等你', isError: false, waited: since(oldest(items) ?? s.updated), ...(items.length ? {} : { note: s.headline }), items }
+    gate = { label: at?.label ?? name, isError: false, waited: since(oldest(items) ?? s.updated), ...(items.length ? {} : { note: s.headline }), items }
   }
   const nodes = known?.nodes ?? []
   // the gate takes the place of its step; a gate with no step of its own goes after the done ones
@@ -93,6 +95,7 @@ export function flowOf(s: Status, now: number): Flow {
   return {
     pipeline: s.pipeline,
     title: known ? `${name} · ${known.subject}` : name,
+    hasSteps: known != null,
     before,
     gate,
     after,
