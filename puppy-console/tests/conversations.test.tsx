@@ -127,8 +127,8 @@ test('the asking conversations are left to the sidebar: only the pipeline waits 
     const ui = await $.ui.mount({ ...PANE, surface })
     const texts = (await ui.findAll({ type: 'Text' })).map(textOf)
     expect(texts).toContain('1 件等你')
-    const list = textOf(await ui.find({ key: 'list' }))
-    expect(list).toContain('音樂：05 · 42/70')
+    const list = textOf(await ui.find({ key: 'card-music' }))
+    expect(list).toContain('05 · 42/70')
     expect(list).not.toContain('Open a PR?')
     // something waits: no puppy
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])

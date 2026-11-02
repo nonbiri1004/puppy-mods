@@ -3,7 +3,11 @@ import { expect, mock, test } from 'claude-code/testing'
 import { byStage, collectorCounts, cut, MAX_SQUARES, picture, unknownStages } from '../hooks/draw'
 import { ago, alerts, expandHome, isOpenable, MAX_ACTIONS, parseActions, isStale, markOf, parseStatus, pipeName, sortCards, textBar, waited } from '../hooks/format'
 import { lineText, view } from '../hooks/view'
+import { flowOf } from '../hooks/nodes'
 import type { Snapshot, Status } from '../types'
+
+const textOf = (node: unknown): string =>
+  typeof node === 'string' ? node : ((node as { children?: unknown[] })?.children ?? []).map(textOf).join('')
 
 const base = {
   format: 'pipeline-status',
@@ -150,17 +154,12 @@ test('the pane draws one card per file and names the files it skipped', { option
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.command.run({ command: 'console', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
 
-  // the details are open from here on: pressed once, kept for the next mount
-  const first = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await first.press({ key: 'show-pipelines' })
-  await first.unmount()
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ type: 'Text', text: /42\/70 usable/ }))?.text).toBe('05 · 42/70 usable')
+    expect(textOf(await ui.find({ key: 'card-music' }))).toMatch(/hear song 7/)
     expect(await ui.findAll({ type: 'Text', text: /hear song 7/ })).toHaveLength(1)   // "next" repeating a waiting item is not shown
-    expect(await ui.find({ type: 'Text', text: /3 jobs, all done/ })).toBeTruthy()
-    // the summary is the same text on both surfaces; the job names wait in the folded details
-    expect((await ui.find({ type: 'Text', text: /^企劃 / }))?.text).toBe('企劃 0 › 片段 0 › 配音 0 › 合成 0 › 成品 1 › 完成 0')
+    // the idle one is a grey line under the cards
+    expect(textOf(await ui.find({ key: 'pipelines' }))).toMatch(/影片：閒置 · 3 jobs, all done/)
     expect((await ui.find({ type: 'Text', text: /^略過 old\.json/ }))?.text).toMatch(/pipeline-status/)
     expect(await ui.find({ type: 'Text', text: /tmp/ })).toBeFalsy()
     await ui.unmount()
@@ -318,4 +317,42 @@ test('the pane opens only things to look at or listen to, by a full path', () =>
   for (const no of ['v/ep04.mp4', '/Applications/Calculator.app', '/Applications/Calculator.app/', '/x/run.command',
     '/x/a.app/Contents/Resources/icon.png', '/v/../etc/a.mp4', '/x/script.sh', '/x/page.html', '/x/a.mp4\0', '-a/x.mp4'])
     expect([no, isOpenable(no)]).toEqual([no, false])
+})
+
+const NOW = Date.parse(base.updated) + 60_000
+const marks = (nodes: { label: string; state: string }[]) => nodes.map(n => `${n.state} ${n.label}`)
+
+test('an ai-video flow: the job at final is the subject, four steps done before its gate', () => {
+  const s = parseStatus(file({
+    pipeline: 'ai-video', state: 'waiting', headline: '1 at final',
+    detail: { jobs: [{ job: 'baibai/ep05', stage: 'clips', spend_usd: 0, cap_usd: 1 }, { job: 'baibai/ep04', stage: 'final', spend_usd: 0, cap_usd: 1 }] },
+    waiting: [{ id: 'f', text: 'check ep04', since: '2026-10-24T21:00:00+08:00' }],
+  }))
+  const f = flowOf(s, NOW)
+  expect(f.title).toBe('影片 · ep04 · 另有 1 支')
+  expect(marks(f.before)).toEqual(['done 企劃', 'done 片段', 'done 配音', 'done 合成'])
+  expect(f.gate).toMatchObject({ label: '成品', isError: false, waited: '1 小時' })
+  expect(f.gate?.items.map(w => w.id)).toEqual(['f'])
+  expect(f.after).toEqual([])
+  expect(f.count).toBe(1)
+})
+
+test('a music flow: songs to hear are the gate 你來聽, the usable count comes after', () => {
+  const s = parseStatus(file({
+    state: 'waiting',
+    detail: { generating: false, batches: [{ name: '05', generated: 88, ok: 42, target_usable: 70, rejected: 3, needs_listen: 2, strip: '' }] },
+    waiting: [{ id: 'l1', text: 'hear song 1' }, { id: 'l2', text: 'hear song 2' }],
+  }))
+  const f = flowOf(s, NOW)
+  expect(f.title).toBe('音樂 · 05')
+  expect(marks(f.before)).toEqual(['done 歌單', 'done 生成 88', 'done 檢查'])
+  expect(f.gate?.label).toBe('你來聽')
+  expect(marks(f.after)).toEqual(['todo 可用 42 / 70 · 退掉 3'])
+  expect(f.count).toBe(2)
+  // nothing to hear and running: no gate, every step in before, one line
+  const quiet = flowOf(parseStatus(file({ detail: { batches: [{ name: '05', generated: 40, needs_listen: 0 }] } })), NOW)
+  expect(quiet.gate).toBeNull()
+  expect(marks(quiet.before)[1]).toBe('running 生成 40')
+  expect(quiet.line).toBe('音樂：跑中 · 05 · 42/70 usable')
+  expect(quiet.count).toBe(0)
 })

@@ -2,17 +2,17 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Conversation, Problem, Snapshot, Status, WaitingAction, WaitingItem } from '../types'
-import { cut, MASCOT_SCALE, mascot, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks, unknownStages } from './draw'
+import { cut, MASCOT_SCALE, mascot, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks } from './draw'
 import type { Mood } from './draw'
-import { ago, alerts, expandHome, isOpenable, isStale, markOf, parseStatus, pipeName, quietWhy, sortCards, STATE_WORDS, waited, waitingEntries } from './format'
+import { ago, alerts, expandHome, isOpenable, parseStatus, sortCards, waited } from './format'
 import { folderName, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
-import { view } from './view'
-import type { View } from './view'
+import { flowOf, MARKS } from './nodes'
+import type { Flow, FlowNode } from './nodes'
 
 const PANE = 'puppy-console'
 const REFRESH_MS = 60_000
-// rows in the list before "▸ 還有 N 件"
-const MAX_ROWS = 8
+// a waiting card's items before "▸ 還有 N 件"
+const MAX_ITEMS = 5
 // The terminal pane asks for this many rows: the 13-row puppy and the list fit.
 const PANE_ROWS = 40
 
@@ -275,11 +275,12 @@ function startReading($: EngineInterface, setting: string, isNotifying: boolean,
   })
 }
 
-function safeView(s: Status, now: number): View {
+// A detail of an unexpected shape loses its steps, not the whole pane.
+function safeFlow(s: Status, now: number): Flow {
   try {
-    return view(s, now)
+    return flowOf(s, now)
   } catch {
-    return { summary: [], detailText: [], facts: [] }
+    return { pipeline: s.pipeline, title: s.pipeline, before: [], gate: null, after: [], line: `${s.pipeline}：${s.headline}`, count: 0 }
   }
 }
 
@@ -387,89 +388,85 @@ export const register: Register = (on, options) => {
     return { text: 'console 已打開。' }
   })
 
-  // The pane answers one question: what waits for you now. One list, one row per thing, each
-  // with its button; the pipelines are one grey line at the bottom that opens to their details.
-  // Nothing waits: the puppy and one sentence.
+  // The pane answers one question: what waits for you now. Each pipeline that waits is drawn as a
+  // flow from top to bottom (nodes.ts): the steps it passed in one grey line of marks, the step
+  // that waits for you as a card with its buttons, then what comes after. The rest are one grey
+  // line each. Nothing waits: the puppy and one sentence above those lines.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
     const snap = await read($, snapshot)
     const now = await $.clock.now()
-    const opened = await read($, openGroups)
     const openedMore = await read($, openMore)
     const ownWriteError = await read($, writeError)
     const note = await read($, actionNote)
     if (!snap) return <Text dimColor>讀取中…</Text>
     const isTerminal = e.surface === 'terminal'
-    const columns = e.props.bodyColumns
+    // a card's body has 4 fewer columns than the pane: its border and padding
+    const cardColumns = Math.max(8, e.props.bodyColumns - 4)
     const hasSvg = !isTerminal && 'Svg' in ui
     const sinceText = (t?: string) => (t && !Number.isNaN(Date.parse(t)) ? waited(now - Date.parse(t)) : '')
 
-    // One row: the words give way, the age and the buttons on the right never wrap (STYLE.md).
-    // The terminal cuts the words by columns; the desktop lets them end at the edge.
-    type Row = { key: string; text: string; word?: { text: string; color: 'warning' | 'error' }; age: string; actions?: WaitingAction[]; group?: string }
-    const row = (r: Row) => {
-      const labels = (r.actions ?? []).map(a => (a.fill != null ? `${a.label}…` : a.label))
-      const right = (r.age ? r.age.length * 2 + 1 : 0) + labels.reduce((n, l) => n + l.length + 5, 0)
-      const lead = r.word ? `${r.word.text} ` : ''
-      const text = isTerminal ? cut(r.text, Math.max(8, columns - right - lead.length * 2)) : r.text
+    const flows = snap.cards.map(s => safeFlow(s, now))
+    const waitingFlows = flows.filter(f => f.gate)
+    const quietFlows = flows.filter(f => !f.gate)
+    const count = flows.reduce((n, f) => n + f.count, 0)
+
+    // ✓ 企劃 ─ ✓ 片段 ─ ◐ 生成 88: one grey line, the words give way at the edge
+    const trail = (key: string, nodes: FlowNode[]) => nodes.length > 0 && (
+      <Text key={key} dimColor wrap="truncate-end">{nodes.map(n => `${MARKS[n.state]} ${n.label}`).join(' ─ ')}</Text>
+    )
+
+    // One waiting item: its words, then its buttons, which never wrap.
+    const item = (pipeline: string, w: WaitingItem) => {
+      const labels = (w.actions ?? []).map(a => (a.fill != null ? `${a.label}…` : a.label))
+      const right = labels.reduce((n, l) => n + l.length + 5, 0) + (w.since ? 8 : 0)
       return (
-        <Box key={`row:${r.key}`} flexDirection="row" gap={1} alignItems="center">
+        <Box key={`item:${pipeline}:${w.id}`} flexDirection="row" gap={1} alignItems="center">
           <Box flexShrink={1} minWidth={0} flexGrow={1}>
-            <Text wrap="truncate-end">{r.word && <Text color={r.word.color}>{lead}</Text>}{text}</Text>
+            <Text wrap="truncate-end">{isTerminal ? cut(w.text, Math.max(8, cardColumns - right)) : w.text}</Text>
           </Box>
           <Box flexShrink={0} flexDirection="row" gap={1} alignItems="center">
-            {r.age && <Text dimColor>{r.age}</Text>}
-            {(r.actions ?? []).map((a, i) => (
-              <Button key={`act:${r.key}:${i}`} label={labels[i]!} onPress={() => pressAction($, a)} />
+            {w.since && <Text dimColor>{sinceText(w.since)}</Text>}
+            {(w.actions ?? []).map((a, i) => (
+              <Button key={`act:${pipeline}:${w.id}:${i}`} label={labels[i]!} onPress={() => pressAction($, a)} />
             ))}
           </Box>
         </Box>
       )
     }
 
-    // Everything that waits, in one flat list: each pipeline's waiting items, or its state when it
-    // waits or broke with no item to name. A pipeline's named group of items is one row that opens
-    // in place. The conversations that ask you something are left to the app's sidebar.
-    const rows: Row[] = []
-    for (const s of snap.cards) {
-      const entries = waitingEntries(s)
-      for (const en of entries) {
-        if ('item' in en) {
-          rows.push({ key: `i:${s.pipeline}:${en.item.id}`, text: en.item.text, age: sinceText(en.item.since), actions: en.item.actions })
-        } else {
-          // by time, not as text: the times may be written in different offsets
-          const oldest = en.items.map(w => w.since).filter(t => t && !Number.isNaN(Date.parse(t))).sort((a, b) => Date.parse(a!) - Date.parse(b!))[0]
-          rows.push({ key: `g:${s.pipeline}:${en.group.id}`, text: `${en.group.label} ×${en.items.length}`, age: sinceText(oldest), group: `${s.pipeline}:${en.group.id}` })
-          if (opened[`${s.pipeline}:${en.group.id}`]) {
-            for (const w of en.items) rows.push({ key: `i:${s.pipeline}:${w.id}`, text: `　${w.text}`, age: sinceText(w.since), actions: w.actions })
-          }
-        }
-      }
-      if (entries.length === 0 && s.state === 'error') rows.push({ key: `s:${s.pipeline}`, text: `${pipeName(s)}：${s.headline}`, word: { text: '出錯', color: 'error' }, age: sinceText(s.updated) })
-      else if (entries.length === 0 && s.state === 'waiting') rows.push({ key: `s:${s.pipeline}`, text: `${pipeName(s)}：${s.headline}`, age: sinceText(s.updated) })
-    }
-    // the count is of things, not rows: an opened group's items are its own one thing
-    const count = rows.filter(r => !r.text.startsWith('　')).length
-    const isAll = openedMore.all === true
-    const shownRows = isAll ? rows : rows.slice(0, MAX_ROWS)
-
-    const listRow = (r: Row) => r.group
-      ? (
-        <Box key={`grp:${r.key}`} flexDirection="row" gap={1}>
-          <Box flexShrink={1} minWidth={0} flexGrow={1}>
-            <Button key={`group:${r.group}`} plain label={`${opened[r.group] ? '▾' : '▸'} ${isTerminal ? cut(r.text, Math.max(8, columns - 12)) : r.text}`} onPress={() => pressOpen($, 'group:', r.group!)} />
+    const flow = (f: Flow) => {
+      const g = f.gate!
+      const isAll = openedMore[f.pipeline] === true
+      const shown = isAll ? g.items : g.items.slice(0, MAX_ITEMS)
+      return (
+        <Box key={`flow-${f.pipeline}`} flexDirection="column" gap="xs">
+          <Text dimColor>{f.title}</Text>
+          {trail(`before-${f.pipeline}`, f.before)}
+          <Box key={`card-${f.pipeline}`} flexDirection="column" borderStyle="round" borderColor={g.isError ? 'error' : 'warning'} paddingX={1} gap="xs">
+            <Box flexDirection="row" justifyContent="space-between" gap={1}>
+              <Box flexShrink={1} minWidth={0}><Text weight="semibold" wrap="truncate-end">{g.label}</Text></Box>
+              <Box flexShrink={0}>
+                <Text><Text color={g.isError ? 'error' : 'warning'}>{g.isError ? '出錯' : '等你'}</Text>{g.waited && <Text dimColor> · {g.waited}</Text>}</Text>
+              </Box>
+            </Box>
+            {g.note && <Text dimColor wrap="truncate-end">{g.note}</Text>}
+            {shown.map(w => item(f.pipeline, w))}
+            {g.items.length > MAX_ITEMS && (
+              <Button key={`more-${f.pipeline}`} label={isAll ? '▾ 收起' : `▸ 還有 ${g.items.length - MAX_ITEMS} 件`} dimColor onPress={() => pressOpen($, 'more:', f.pipeline)} />
+            )}
           </Box>
-          <Box flexShrink={0}>{r.age && <Text dimColor>{r.age}</Text>}</Box>
+          {trail(`after-${f.pipeline}`, f.after)}
         </Box>
       )
-      : row(r)
+    }
 
     // The puppy types while a conversation is running, else sleeps: it shows only when nothing waits.
     const mood: Mood = snap.conversations.some(c => shownState(c, now) === 'running') ? 'typing' : 'sleeping'
     const puppy = hasSvg && 'Svg' in ui
       ? <ui.Svg source={mascot(mood)} alt={`白白${mood === 'typing' ? '在打筆電' : '在睡覺'}`} width={34 * MASCOT_SCALE} height={26 * MASCOT_SCALE} isInteractive />
-      : !hasSvg && e.props.scroll.bodyRows >= PUPPY_MIN_ROWS && columns >= PUPPY_COLUMNS
+      : !hasSvg && e.props.scroll.bodyRows >= PUPPY_MIN_ROWS && e.props.bodyColumns >= PUPPY_COLUMNS
         ? (
           <Box key="puppy" flexDirection="column">
             {stillBlocks(mood).map((runs, i) => (
@@ -482,43 +479,14 @@ export const register: Register = (on, options) => {
         )
         : null
 
-    // Each pipeline in a few grey words: 影片：閒置 · 音樂：跑中 42/70. Only 等你 has a color, and
-    // 出錯 its own. Pressed, it opens each pipeline's details below it.
-    const isPipesOpen = openedMore.pipelines === true
-    const pipes = snap.cards.length > 0 && (
-      <Box key="pipelines" flexDirection="column" gap="xs">
-        <Button key="show-pipelines" plain onPress={() => pressOpen($, 'more:', 'pipelines')}>
-          <Text dimColor>{isPipesOpen ? '▾' : '▸'} </Text>
-          {snap.cards.map((s, i) => {
-            const mark = markOf(s, now)
-            const color = mark === 'waiting' ? 'warning' : mark === 'error' ? 'error' : undefined
-            const progress = s.progress?.total ? ` ${s.progress.done}/${s.progress.total}` : ''
-            return (
-              <Text key={`pipe-${s.pipeline}`} dimColor={!color}>
-                {i > 0 && <Text dimColor> · </Text>}
-                <Text dimColor>{pipeName(s)}：</Text><Text color={color} dimColor={!color}>{STATE_WORDS[mark]}</Text><Text dimColor>{progress}</Text>
-              </Text>
-            )
-          })}
-        </Button>
-        {isPipesOpen && snap.cards.map(s => {
-          const v = safeView(s, now)
-          const stale = isStale(s, now) && s.state !== 'error'
-          return (
-            <Box key={`pipe-detail-${s.pipeline}`} flexDirection="column" paddingLeft={2}>
-              <Text><Text weight="semibold">{pipeName(s)}</Text><Text dimColor> · {STATE_WORDS[markOf(s, now)]} · {ago(now - Date.parse(s.updated))}</Text></Text>
-              <Text dimColor wrap="truncate-end">{s.headline}</Text>
-              {stale && <Text dimColor>{quietWhy(s, now)}</Text>}
-              {v.summary.map((l, i) => (
-                <Text key={`sum-${s.pipeline}-${i}`} dimColor>{l.label ? `${l.label} ` : ''}{l.parts.map(p => p.text).join(l.sep)}</Text>
-              ))}
-              {/* jobs at a stage the summary has no place for, named so none goes missing */}
-              {unknownStages(s).map(line => <Text key={`other-${line}`} dimColor>其他階段 · {line}</Text>)}
-              {v.detailText.map(line => <Text dimColor>{line}</Text>)}
-              {v.facts.map(line => <Text dimColor>{line}</Text>)}
-            </Box>
-          )
-        })}
+    // The pipelines that wait for nothing: one grey line each, a mark for running or idle.
+    const lines = quietFlows.length > 0 && (
+      <Box key="pipelines" flexDirection="column">
+        {quietFlows.map(f => (
+          <Text key={`line-${f.pipeline}`} dimColor wrap="truncate-end">
+            {snap.cards.find(s => s.pipeline === f.pipeline)?.state === 'running' ? MARKS.running : MARKS.done} {isTerminal ? cut(f.line, Math.max(8, e.props.bodyColumns - 2)) : f.line}
+          </Text>
+        ))}
       </Box>
     )
 
@@ -532,18 +500,16 @@ export const register: Register = (on, options) => {
             <Button key="refresh" label="重新整理" hotkey="r" onPress={() => refresh($, setting, false, isWriting)} />
           </Box>
         </Box>
-        {count > 0 ? (
-          <Box key="list" flexDirection="column" gap={isTerminal ? 0 : 'xs'}>
-            {shownRows.map(listRow)}
-            {rows.length > MAX_ROWS && <Button key="more-all" label={`${isAll ? '▾ 收起' : `▸ 還有 ${rows.length - MAX_ROWS} 件`}`} dimColor onPress={() => pressOpen($, 'more:', 'all')} />}
-          </Box>
-        ) : (
-          <Box key="empty" flexDirection="column" alignItems="center" gap="xs">
-            {puppy}
-            <Text>都處理完了</Text>
-          </Box>
-        )}
+        {count > 0
+          ? waitingFlows.map(flow)
+          : (
+            <Box key="empty" flexDirection="column" alignItems="center" gap="xs">
+              {puppy}
+              <Text>都處理完了</Text>
+            </Box>
+          )}
         {note && (note.isError ? <Text color="error">{note.text}</Text> : <Text dimColor>{note.text}</Text>)}
+        {lines}
         {isWriting && snap.conversationsError && <Text color="error">讀不到對話資料夾：{snap.conversationsError}</Text>}
         {isWriting && ownWriteError && <Text dimColor>這個對話寫不進自己的檔：{ownWriteError}</Text>}
         {snap.dirError && (
@@ -555,7 +521,6 @@ export const register: Register = (on, options) => {
         {!snap.dirError && snap.cards.length === 0 && snap.problems.length === 0 && (
           <Text dimColor>{snap.dir} 裡還沒有狀態檔</Text>
         )}
-        {pipes}
         {snap.problems.map(p => (
           <Text key={`p:${p.file}`} dimColor>略過 {p.file}：{p.reason}</Text>
         ))}
