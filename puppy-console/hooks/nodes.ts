@@ -30,6 +30,10 @@ export type Flow = {
 
 export const STAGE_WORDS: Record<Stage, string> = { plan: '企劃', clips: '片段', voice: '配音', compose: '合成', final: '成品', done: '完成' }
 export const MARKS: Record<NodeState, string> = { done: '✓', running: '◐', waiting: '●', todo: '○' }
+// the desktop's marks: a full dot for done, as the mockup draws them
+export const DOTS: Record<NodeState, string> = { done: '●', running: '◐', waiting: '●', todo: '○' }
+// the desktop's line from the steps to the card: one warm grey stroke, light by day and dark by night
+export const STEM_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 14" width="12" height="14"><style>line{stroke:#c9c2b9}@media (prefers-color-scheme:dark){line{stroke:#57514b}}</style><line x1="5" y1="0" x2="5" y2="14" stroke-width="1.5"/></svg>'
 // The app's theme colors for the marks: done green, running blue; a step not reached stays grey.
 export const MARK_COLORS: Record<NodeState, 'success' | 'suggestion' | 'warning' | undefined> = { done: 'success', running: 'suggestion', waiting: 'warning', todo: undefined }
 

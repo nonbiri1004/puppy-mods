@@ -374,8 +374,8 @@ test('two pipelines wait: the count, each flow\'s title, trails and card with it
   expect(texts).toContain('3 waiting for you')
   expect(texts).toContain('影片 · ep04')
   expect(texts).toContain('音樂 · 05')
-  expect(texts).toContain('✓ 企劃 ─ ✓ 片段 ─ ✓ 配音 ─ ✓ 合成')
-  expect(texts).toContain('✓ 歌單 ─ ✓ 生成 88 ─ ✓ 檢查')
+  expect(texts).toContain('● 企劃 ─ ● 片段 ─ ● 配音 ─ ● 合成')
+  expect(texts).toContain('● 歌單 ─ ● 生成 88 ─ ● 檢查')
   expect(texts).toContain('○ 可用 42 / 70')
   const video = await ui.find({ key: 'card-ai-video' })
   expect(video?.props.borderColor).toBe('warning')
@@ -385,10 +385,13 @@ test('two pipelines wait: the count, each flow\'s title, trails and card with it
   expect((await ui.find({ key: 'act:ai-video:f:1' }))?.text).toBe('send back…')
   expect(await ui.find({ key: 'pipelines' })).toBeFalsy()
   // a thin line joins the steps to the card, and the card to the steps after it
-  expect(texts.filter(t => t === '│')).toHaveLength(3)
-  // the marks carry the step's color: done green, running blue, not reached grey
-  const marks = (await ui.findAll({ type: 'Text' })).filter(t => ['✓', '◐', '○'].includes(textOf(t)))
-  expect(marks.filter(t => textOf(t) === '✓').every(t => t.props.color === 'success')).toBe(true)
+  // on the desktop it is a drawn line, three of them here
+  for (const key of ['stem-before-ai-video', 'stem-before-music', 'stem-after-music'])
+    expect((await ui.find({ key }))?.children?.some(c => (c as { type?: string }).type === 'Svg')).toBe(true)
+  // the marks are dots on the desktop and carry the step's color: done green, running blue, not reached grey
+  const marks = (await ui.findAll({ type: 'Text' })).filter(t => ['●', '◐', '○'].includes(textOf(t)))
+  expect(marks.filter(t => textOf(t) === '●').length).toBeGreaterThan(0)
+  expect(marks.filter(t => textOf(t) === '●').every(t => t.props.color === 'success')).toBe(true)
   expect(marks.find(t => textOf(t) === '○')?.props.color).toBeUndefined()
   await ui.unmount()
 })
@@ -417,7 +420,7 @@ test('nothing waits: each pipeline is one grey line, idle ones with their last o
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(textOf(await ui.find({ key: 'empty' }))).toMatch(/都處理完了$/)
   const lines = textOf(await ui.find({ key: 'pipelines' }))
-  expect(lines).toContain('✓ 影片：閒置 · 上次 電車 final.mp4，2 天前')
+  expect(lines).toContain('● 影片：閒置 · 上次 電車 final.mp4，2 天前')
   expect(lines).toContain('◐ 音樂：跑中 · 05 · 42/70 usable')
   expect(lines).not.toContain('nothing open')
   expect(await ui.find({ key: 'card-ai-video' })).toBeFalsy()
