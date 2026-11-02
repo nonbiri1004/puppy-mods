@@ -30,6 +30,8 @@ export type Flow = {
 
 export const STAGE_WORDS: Record<Stage, string> = { plan: '企劃', clips: '片段', voice: '配音', compose: '合成', final: '成品', done: '完成' }
 export const MARKS: Record<NodeState, string> = { done: '✓', running: '◐', waiting: '●', todo: '○' }
+// The app's theme colors for the marks: done green, running blue; a step not reached stays grey.
+export const MARK_COLORS: Record<NodeState, 'success' | 'suggestion' | 'warning' | undefined> = { done: 'success', running: 'suggestion', waiting: 'warning', todo: undefined }
 
 const oldest = (items: WaitingItem[]) =>
   items.map(w => w.since).filter((t): t is string => !!t && !Number.isNaN(Date.parse(t))).sort((a, b) => Date.parse(a) - Date.parse(b))[0]

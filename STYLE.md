@@ -39,6 +39,7 @@ How every puppy mod looks, so they feel like one family. `puppy-console` is the 
   - `error`: something broke.
   - `success`: something is working right now.
   - Everything else: `dimColor`, or the normal text color.
+- Step marks in a flow (puppy-console's ✓ ◐ ○) may carry the step's color: done `success`, running `suggestion`, not reached grey. Only the mark, never its words. (The person chose this from the console mockups, 2026-11.)
 - One color word per line at most. Color the word that matters (the state, the label), not the whole line.
 - No color per project or per group: groups are told apart by cards and names, in greys. Something old or important gets the full text color, bold, and a small mark, not a new color.
 - A grey bar down a list's left edge is a dim `▎` on each row, not a Box with a `backgroundColor`: a theme's grey fill turns white in 16-color themes.

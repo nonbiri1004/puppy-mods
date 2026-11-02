@@ -6,7 +6,7 @@ import { cut, MASCOT_SCALE, mascot, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks }
 import type { Mood } from './draw'
 import { ago, alerts, expandHome, isOpenable, parseStatus, sortCards, waited } from './format'
 import { folderName, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
-import { flowOf, MARKS } from './nodes'
+import { flowOf, MARK_COLORS, MARKS } from './nodes'
 import type { Flow, FlowNode } from './nodes'
 
 const PANE = 'puppy-console'
@@ -412,9 +412,14 @@ export const register: Register = (on, options) => {
     const quietFlows = flows.filter(f => !f.gate)
     const count = flows.reduce((n, f) => n + f.count, 0)
 
-    // ✓ 企劃 ─ ✓ 片段 ─ ◐ 生成 88: one grey line, the words give way at the edge
+    // ✓ 企劃 ─ ✓ 片段 ─ ◐ 生成 88: one line, the words give way at the edge. The marks carry the
+    // step's color (done green, running blue, as the mockup the person chose); the words stay grey.
     const trail = (key: string, nodes: FlowNode[]) => nodes.length > 0 && (
-      <Text key={key} dimColor wrap="truncate-end">{nodes.map(n => `${MARKS[n.state]} ${n.label}`).join(' ─ ')}</Text>
+      <Text key={key} wrap="truncate-end">
+        {nodes.map((n, i) => (
+          <Text>{i > 0 && <Text dimColor> ─ </Text>}<Text color={MARK_COLORS[n.state]} dimColor={!MARK_COLORS[n.state]}>{MARKS[n.state]}</Text><Text dimColor> {n.label}</Text></Text>
+        ))}
+      </Text>
     )
 
     // One waiting item: its words and how long it has waited on one row, its buttons on the row
@@ -495,7 +500,7 @@ export const register: Register = (on, options) => {
       <Box key="pipelines" flexDirection="column">
         {quietFlows.map(f => (
           <Text key={`line-${f.pipeline}`} dimColor wrap="truncate-end">
-            {snap.cards.find(s => s.pipeline === f.pipeline)?.state === 'running' ? MARKS.running : MARKS.done} {isTerminal ? cut(f.line, Math.max(8, e.props.bodyColumns - 2)) : f.line}
+            {(st => <Text color={MARK_COLORS[st]}>{MARKS[st]}</Text>)(snap.cards.find(s => s.pipeline === f.pipeline)?.state === 'running' ? 'running' : 'done')} {isTerminal ? cut(f.line, Math.max(8, e.props.bodyColumns - 2)) : f.line}
           </Text>
         ))}
       </Box>

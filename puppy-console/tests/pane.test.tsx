@@ -386,6 +386,10 @@ test('two pipelines wait: the count, each flow\'s title, trails and card with it
   expect(await ui.find({ key: 'pipelines' })).toBeFalsy()
   // a thin line joins the steps to the card, and the card to the steps after it
   expect(texts.filter(t => t === '│')).toHaveLength(3)
+  // the marks carry the step's color: done green, running blue, not reached grey
+  const marks = (await ui.findAll({ type: 'Text' })).filter(t => ['✓', '◐', '○'].includes(textOf(t)))
+  expect(marks.filter(t => textOf(t) === '✓').every(t => t.props.color === 'success')).toBe(true)
+  expect(marks.find(t => textOf(t) === '○')?.props.color).toBeUndefined()
   await ui.unmount()
 })
 
