@@ -6,7 +6,7 @@ import { cut, MASCOT_SCALE, mascot, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks }
 import type { Mood } from './draw'
 import { ago, alerts, expandHome, isOpenable, parseStatus, sortCards, waited } from './format'
 import { folderName, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
-import { flowOf, MARK_COLORS, MARKS } from './nodes'
+import { DOTS, flowOf, MARK_COLORS, MARKS, STEM_SVG } from './nodes'
 import type { Flow, FlowNode } from './nodes'
 
 const PANE = 'puppy-console'
@@ -412,12 +412,14 @@ export const register: Register = (on, options) => {
     const quietFlows = flows.filter(f => !f.gate)
     const count = flows.reduce((n, f) => n + f.count, 0)
 
+    // dots on the desktop, as in the mockup; ✓ ◐ ○ on the terminal, where a dot reads as a bullet
+    const marks = hasSvg ? DOTS : MARKS
     // ✓ 企劃 ─ ✓ 片段 ─ ◐ 生成 88: one line, the words give way at the edge. The marks carry the
     // step's color (done green, running blue, as the mockup the person chose); the words stay grey.
     const trail = (key: string, nodes: FlowNode[]) => nodes.length > 0 && (
       <Text key={key} wrap="truncate-end">
         {nodes.map((n, i) => (
-          <Text>{i > 0 && <Text dimColor> ─ </Text>}<Text color={MARK_COLORS[n.state]} dimColor={!MARK_COLORS[n.state]}>{MARKS[n.state]}</Text><Text dimColor> {n.label}</Text></Text>
+          <Text>{i > 0 && <Text dimColor> ─ </Text>}<Text color={MARK_COLORS[n.state]} dimColor={!MARK_COLORS[n.state]}>{marks[n.state]}</Text><Text dimColor> {n.label}</Text></Text>
         ))}
       </Text>
     )
@@ -446,8 +448,15 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // the thin line that joins a row of steps to the card, under the first mark
-    const stem = (key: string) => <Text key={key} dimColor>│</Text>
+    // The thin line that joins a row of steps to the card, under the first mark: a drawn line on
+    // the desktop, so it meets the rows above and below with no gap; a │ on the terminal.
+    const stem = (key: string) => (
+      <Box key={key} flexDirection="row">
+        {hasSvg && 'Svg' in ui
+          ? <ui.Svg source={STEM_SVG} alt="" width={12} height={14} />
+          : <Text dimColor>│</Text>}
+      </Box>
+    )
 
     const flow = (f: Flow) => {
       const g = f.gate!
@@ -456,14 +465,16 @@ export const register: Register = (on, options) => {
       return (
         <Box key={`flow-${f.pipeline}`} flexDirection="column" gap="xs">
           {/* a pipeline with no steps known to the mod: its name is the card's own header */}
-          {f.hasSteps && <Text dimColor>{f.title}</Text>}
+          {f.hasSteps && <Text weight="semibold">{f.title}</Text>}
+          {/* the steps, the lines and the card touch, so they read as one flow */}
+          <Box key={`steps-${f.pipeline}`} flexDirection="column">
           {trail(`before-${f.pipeline}`, f.before)}
           {f.before.length > 0 && stem(`stem-before-${f.pipeline}`)}
           <Box key={`card-${f.pipeline}`} flexDirection="column" borderStyle="round" borderColor={g.isError ? 'error' : 'warning'} paddingX={1} gap="xs">
             <Box flexDirection="row" justifyContent="space-between" gap={1}>
               <Box flexShrink={1} minWidth={0}><Text weight="semibold" wrap="truncate-end">{g.label}</Text></Box>
               <Box flexShrink={0}>
-                <Text><Text color={g.isError ? 'error' : 'warning'}>{g.isError ? '出錯' : '等你'}</Text>{g.waited && <Text dimColor> · {g.waited}</Text>}</Text>
+                <Text><Text color={g.isError ? 'error' : 'warning'}>{g.isError ? '出錯' : 'waiting'}</Text>{g.waited && <Text dimColor> · {g.waited}</Text>}</Text>
               </Box>
             </Box>
             {g.note && <Text dimColor wrap="truncate-end">{g.note}</Text>}
@@ -474,6 +485,7 @@ export const register: Register = (on, options) => {
           </Box>
           {f.after.length > 0 && stem(`stem-after-${f.pipeline}`)}
           {trail(`after-${f.pipeline}`, f.after)}
+          </Box>
         </Box>
       )
     }
@@ -500,7 +512,7 @@ export const register: Register = (on, options) => {
       <Box key="pipelines" flexDirection="column">
         {quietFlows.map(f => (
           <Text key={`line-${f.pipeline}`} dimColor wrap="truncate-end">
-            {(st => <Text color={MARK_COLORS[st]}>{MARKS[st]}</Text>)(snap.cards.find(s => s.pipeline === f.pipeline)?.state === 'running' ? 'running' : 'done')} {isTerminal ? cut(f.line, Math.max(8, e.props.bodyColumns - 2)) : f.line}
+            {(st => <Text color={MARK_COLORS[st]}>{marks[st]}</Text>)(snap.cards.find(s => s.pipeline === f.pipeline)?.state === 'running' ? 'running' : 'done')} {isTerminal ? cut(f.line, Math.max(8, e.props.bodyColumns - 2)) : f.line}
           </Text>
         ))}
       </Box>
@@ -509,7 +521,7 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
-          {count > 0 ? <Text><Text color="warning" weight="semibold">{count} 件等你</Text></Text> : <Text dimColor>{ago(now - snap.loadedAt)}看過</Text>}
+          {count > 0 ? <Text><Text color="warning" weight="semibold">{count} waiting for you</Text></Text> : <Text dimColor>{ago(now - snap.loadedAt)}看過</Text>}
           <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
             {count > 0 && <Text dimColor>{ago(now - snap.loadedAt)}</Text>}
             {/* no toast: what it finds shows right here */}

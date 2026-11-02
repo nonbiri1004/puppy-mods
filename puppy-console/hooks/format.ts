@@ -152,7 +152,7 @@ export const pipeName = (s: Status) =>
   NAMES[s.pipeline] ?? (s.pipeline.startsWith('collector-') && !s.title ? `收集 ${s.pipeline.slice('collector-'.length)}` : titleOf(s))
 
 // The words for a card's mark (markOf).
-export const STATE_WORDS: Record<State | 'quiet', string> = { running: '跑中', idle: '閒置', waiting: '等你', error: '出錯', quiet: '沒消息' }
+export const STATE_WORDS: Record<State | 'quiet', string> = { running: '跑中', idle: '閒置', waiting: 'waiting', error: '出錯', quiet: '沒消息' }
 
 // A text progress bar for surfaces without Svg: ▓▓▓▓░░░░░░ 42/70 usable songs
 export function textBar(p: NonNullable<Status['progress']>, width = 10): string {

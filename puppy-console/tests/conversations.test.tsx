@@ -126,7 +126,7 @@ test('the asking conversations are left to the sidebar: only the pipeline waits 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     const texts = (await ui.findAll({ type: 'Text' })).map(textOf)
-    expect(texts).toContain('1 件等你')
+    expect(texts).toContain('1 waiting for you')
     const list = textOf(await ui.find({ key: 'card-music' }))
     expect(list).toContain('05 · 42/70')
     expect(list).not.toContain('Open a PR?')
