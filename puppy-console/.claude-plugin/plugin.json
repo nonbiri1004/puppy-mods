@@ -1,7 +1,7 @@
 {
   "name": "puppy-console",
-  "version": "0.9.0",
-  "description": "a pane with what waits for you first, then one short card per production pipeline, read from small status files",
+  "version": "0.10.0",
+  "description": "a pane that answers one question: what waits for you now. one row per thing, with its button; the pipelines in one line",
   "types": "./types/index.d.ts",
   "author": {
     "name": "lofi puppy",

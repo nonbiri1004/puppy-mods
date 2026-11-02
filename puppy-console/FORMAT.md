@@ -1,6 +1,6 @@
 # the status file format
 
-every pipeline writes one small json file into one shared folder. the mod reads every `*.json` in that folder and draws one card per file. it reads the folder only while its pane is open (once on `/console`, then every minute). the mod never runs a pipeline and never writes into the folder; the most a button does is open a file to look at, or put words in the prompt box (see `actions`, below). (it keeps its own conversation files elsewhere; see conversations, below.)
+every pipeline writes one small json file into one shared folder. the mod reads every `*.json` in that folder and shows each one: its waiting items in the pane's list, and its state in the pipelines line. it reads the folder only while its pane is open (once on `/console`, then every minute). the mod never runs a pipeline and never writes into the folder; the most a button does is open a file to look at, or put words in the prompt box (see `actions`, below). (it keeps its own conversation files elsewhere; see conversations, below.)
 
 ```
 <status folder>/
@@ -37,7 +37,7 @@ every pipeline writes one small json file into one shared folder. the mod reads 
 | `pipeline` | yes | short id, lowercase, `a-z 0-9 -`; the file name is `<pipeline>.json` |
 | `title` | no | the card's title; `pipeline` when missing |
 | `host` | no | which computer wrote it |
-| `updated` | yes | iso 8601 time with the offset, when the file was written. a card more than three days old folds into `older` at the bottom of the pane, unless it is `waiting` or `error` or has anything in `waiting` |
+| `updated` | yes | iso 8601 time with the offset, when the file was written |
 | `stale_after_sec` | no | after this many seconds with no new file, the card says the pipeline has gone quiet. leave it out for a pipeline that only writes when you run a command |
 | `state` | yes | `running` (working now), `idle` (nothing to do), `waiting` (stopped until you do something), `error` (stopped by a problem) |
 | `headline` | yes | one short line: what it is doing now |
@@ -50,7 +50,7 @@ every pipeline writes one small json file into one shared folder. the mod reads 
 
 ## actions
 
-an item in `waiting` can carry up to three buttons, `actions: [{ label, open | fill }]`, drawn under it in the pane's **for you** card. `label` is the button's word, at most 24 characters. each action has exactly one of:
+an item in `waiting` can carry up to three buttons, `actions: [{ label, open | fill }]`, drawn on its row in the pane's list. `label` is the button's word, at most 24 characters. each action has exactly one of:
 
 - `open`: a full path (or `~/…`) the pane opens with the computer's own app (macOS `open`) when you press it. it has to be a picture, a video, a sound or a pdf (`.mp4 .mov .m4v .webm .mkv .mp3 .wav .m4a .aac .flac .ogg .png .jpg .jpeg .gif .webp .pdf`), or a folder written with a `/` at the end. the folder can be synced, so the pane never opens anything that runs: no app or other bundle anywhere in the path, no `..`, and the same check again on where the path really leads (links resolved) when you press. a path that is not on this computer says so in the pane.
 - `fill`: at most 500 characters the pane puts in the prompt box of the conversation the pane is in, after anything already typed there. it sends nothing: you finish the words and press enter. write it so claude knows what to do without the card, for example `"in ai-video-pipeline, send baibai/ep04 back to compose because: "`.
@@ -59,7 +59,7 @@ an action that breaks a rule is left out, like any field of the wrong type; the 
 
 ## waiting groups
 
-when a pipeline has several items of one kind (three finals to review), it can name the kind once and point its items at it, so **for you** shows them as one line, `▸ review finals ×3 · 24h` (the oldest one's wait), that opens in place to each item and its buttons:
+when a pipeline has several items of one kind (three finals to review), it can name the kind once and point its items at it, so the list shows them as one row, `▸ review finals ×3 · 24h` (the oldest one's wait), that opens in place to each item and its buttons:
 
 ```json
 "waiting_groups": [{ "id": "final-review", "label": "成片待審" }],
@@ -82,18 +82,18 @@ when a pipeline has several items of one kind (three finals to review), it can n
 
 the mod draws these when `pipeline` matches; anything else in `detail` is ignored.
 
-- `music`: `{ comfy: { up, running, pending }, generating, batches: [{ name, strip, est_usable, target_usable, generated, ok, needs_listen, rejected, errors, avg_gen_sec, status_tail }] }`. `strip` has one letter per song: `o` ok, `l` to hear, `r` rejected, `x` left out, `e` failed, `?` being checked. the card shows the first batch: its name, then made · ok · to hear · rejected (and failed, and the minutes per song); the squares are in its details.
-- `ai-video`: `{ spend_usd, cap_usd, jobs: [{ job, stage, spend_usd, cap_usd, updated, next }] }`. `stage` is `plan`, `clips`, `voice`, `compose`, `final` or `done`; the card counts the jobs at every stage in one row, then the spend, and names them by stage in its details.
+- `music`: `{ comfy: { up, running, pending }, generating, batches: [{ name, strip, est_usable, target_usable, generated, ok, needs_listen, rejected, errors, avg_gen_sec, status_tail }] }`. `strip` has one letter per song: `o` ok, `l` to hear, `r` rejected, `x` left out, `e` failed, `?` being checked. the pipeline's details show the first batch: its name, then made · ok · to hear · rejected (and failed, and the minutes per song).
+- `ai-video`: `{ spend_usd, cap_usd, jobs: [{ job, stage, spend_usd, cap_usd, updated, next }] }`. `stage` is `plan`, `clips`, `voice`, `compose`, `final` or `done`; the pipeline's details count the jobs at every stage, then the spend, and name them by stage.
 - `collector-*` (info-collector, one file per profile, e.g. `collector-tech-news`; matched by the prefix): `{ counts: { collected, new, scored, sent, unsent, pending }, errors: [text] }`.
   - `collected`, `new`, `scored` and `sent` are this run. `scored` can be more than `new` (older unscored items are scored too), and `sent` can be more than `scored` (earlier runs' picks).
   - `unsent`: high-scored items not in notion yet (sent next run, or refused).
   - `pending`: items waiting for your review in notion now, from every run. at most 100 (`100` means 100 or more); `null` when notion could not be read.
   - the card shows this run's four counts side by side, then `pending` and `unsent`.
-  - without `counts` (older files) the card shows only `progress`, if the file has one.
+  - without `counts` (older files) the details show only `progress`, if the file has one.
 
 ## conversations
 
-the mod itself writes one more kind of file, one per conversation, in `~/.claude/console/sessions/<session id>.json`: on this computer only, never in the status folder, because it holds what you typed. only that conversation writes its file, one write after another, and never while holding up a turn; it writes once more when the conversation ends. the pane reads them for the first card. a file there that does not parse (caught halfway through a write) keeps what the last read had; one whose `id` is not its file name is named at the bottom of the pane and left out.
+the mod itself writes one more kind of file, one per conversation, in `~/.claude/console/sessions/<session id>.json`: on this computer only, never in the status folder, because it holds what you typed. only that conversation writes its file, one write after another, and never while holding up a turn; it writes once more when the conversation ends. the pane reads them to know which conversations ask you something. a file there that does not parse (caught halfway through a write) keeps what the last read had; one whose `id` is not its file name is named at the bottom of the pane and left out.
 
 ```json
 {
@@ -110,4 +110,4 @@ the mod itself writes one more kind of file, one per conversation, in `~/.claude
 }
 ```
 
-`state` is `running` (a turn is going), `waiting` (the last turn asked you something), `done` or `error`. when the conversation ends, a `running` file becomes `done`; a `/clear` also turns `waiting` into `done`. a `running` file older than six hours is shown as `done` anyway (the conversation stopped without ending, a crash). `isAppTitle` is `true` once `title` is the app's own; `isFork` is `true` for a conversation forked from another, or one the app named as a side chat (`Side chat`, `btw: …`), which the card leaves out; it also leaves out a file whose app title names a side chat without `isFork`. `host` is optional. files older than three days are not shown, except a `waiting` one, shown for two weeks; they stay in the folder.
+`state` is `running` (a turn is going), `waiting` (the last turn asked you something), `done` or `error`. when the conversation ends, a `running` file becomes `done`; a `/clear` also turns `waiting` into `done`. a `running` file older than six hours is shown as `done` anyway (the conversation stopped without ending, a crash). `isAppTitle` is `true` once `title` is the app's own; `isFork` is `true` for a conversation forked from another, or one the app named as a side chat (`Side chat`, `btw: …`), which the pane leaves out; it also leaves out a file whose app title names a side chat without `isFork`. `host` is optional. files older than three days are not shown, except a `waiting` one, shown for two weeks; they stay in the folder.
