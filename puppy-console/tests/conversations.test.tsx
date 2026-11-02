@@ -98,7 +98,7 @@ const entry = (name: string, kind: 'file' | 'dir' = 'file') => ({ name, kind, si
 const textOf = (node: unknown): string =>
   typeof node === 'string' ? node : ((node as { children?: unknown[] })?.children ?? []).map(textOf).join('')
 
-test('the asking conversations come first in the list, with what each one asks; done ones are not listed', { options: { status_dir: '/s' } }, async ($, on) => {
+test('the asking conversations are left to the sidebar: only the pipeline waits in the list', { options: { status_dir: '/s' } }, async ($, on) => {
   const files: Record<string, string> = {
     '/home/me/.claude/console/sessions/a.json': conv({ id: 'a', state: 'waiting', isAppTitle: true, title: 'console sessions', recap: 'Card added.', ask: 'Open a PR?' }),
     '/home/me/.claude/console/sessions/b.json': conv({ id: 'b', state: 'done', title: 'fix the bowl' }),
@@ -126,10 +126,10 @@ test('the asking conversations come first in the list, with what each one asks; 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     const texts = (await ui.findAll({ type: 'Text' })).map(textOf)
-    expect(texts).toContain('2 件等你')
+    expect(texts).toContain('1 件等你')
     const list = textOf(await ui.find({ key: 'list' }))
-    expect(list.indexOf('「console sessions」問你：Open a PR?')).toBeGreaterThan(-1)
-    expect(list.indexOf('「console sessions」問你：Open a PR?')).toBeLessThan(list.indexOf('音樂：05 · 42/70'))
+    expect(list).toContain('音樂：05 · 42/70')
+    expect(list).not.toContain('Open a PR?')
     // something waits: no puppy
     expect(await ui.findAll({ type: 'Svg' })).toEqual([])
     expect(texts.some(t => /Card added|fix the bowl/.test(t))).toBe(false)

@@ -5,7 +5,7 @@ import type { Conversation, Problem, Snapshot, Status, WaitingAction, WaitingIte
 import { cut, MASCOT_SCALE, mascot, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks, unknownStages } from './draw'
 import type { Mood } from './draw'
 import { ago, alerts, expandHome, isOpenable, isStale, markOf, parseStatus, pipeName, quietWhy, sortCards, STATE_WORDS, waited, waitingEntries } from './format'
-import { askName, folderName, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
+import { folderName, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
 import { view } from './view'
 import type { View } from './view'
 
@@ -428,23 +428,10 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // Everything that waits, in one flat list: the conversations that ask you something (you
-    // answer there), then each pipeline's waiting items, or its state when it waits or broke with
-    // no item to name. A pipeline's named group of items is one row that opens in place.
+    // Everything that waits, in one flat list: each pipeline's waiting items, or its state when it
+    // waits or broke with no item to name. A pipeline's named group of items is one row that opens
+    // in place. The conversations that ask you something are left to the app's sidebar.
     const rows: Row[] = []
-    const asking = snap.conversations
-      .filter(c => !c.isFork && ['waiting', 'error'].includes(shownState(c, now)))
-      .sort((a, b) => Date.parse(b.updated) - Date.parse(a.updated))
-    for (const c of asking) {
-      const isError = shownState(c, now) === 'error'
-      const name = askName(c)
-      rows.push({
-        key: `c:${c.id}`,
-        text: isError ? `「${c.title}」的上一輪出錯了` : name === c.ask ? `對話問你：${c.ask}` : `「${name}」問你：${c.ask}`,
-        ...(isError ? { word: { text: '出錯', color: 'error' as const } } : {}),
-        age: sinceText(c.updated),
-      })
-    }
     for (const s of snap.cards) {
       const entries = waitingEntries(s)
       for (const en of entries) {

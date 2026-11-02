@@ -364,7 +364,6 @@ test('a conversation file that does not parse is named, and its last read still 
   const texts = await textsOf(ui)
   expect(texts.some(t => /^略過 sessions\/b\.json：/.test(t))).toBe(true)
   expect(texts.some(t => /^略過 sessions\/a\.json：.*showing the last read/.test(t))).toBe(true)
-  expect(await listOf(ui)).toMatch(/「console sessions」問你：Open a PR\?/)
   await ui.unmount()
 })
 
@@ -374,7 +373,7 @@ const ACTIONS = [
 ]
 
 for (const surface of ['terminal', 'desktop'] as const)
-test(`three things wait: the count, then the asking conversations, then the pipelines' items with their buttons (${surface})`, { options: { status_dir: '/s' } }, async ($, on) => {
+test(`three things wait: the count, then the pipelines' items with their buttons, no conversations (${surface})`, { options: { status_dir: '/s' } }, async ($, on) => {
   const { w } = world(on, {
     'ai-video.json': status({ pipeline: 'ai-video', state: 'waiting', headline: '1 job at final', waiting: [{ id: 'f', text: 'check ep04', actions: ACTIONS }] }),
     'music.json': status({ state: 'waiting', headline: '05 · pick the next batch' }),
@@ -386,43 +385,18 @@ test(`three things wait: the count, then the asking conversations, then the pipe
   await $.command.run(RUN)
   const ui = await $.ui.mount({ ...PANE, surface })
   const texts = await textsOf(ui)
-  expect(texts).toContain('3 件等你')
+  expect(texts).toContain('2 件等你')
   const list = await listOf(ui)
-  const order = ['「console sessions」問你：Open a PR?', 'check ep04', '音樂：05 · pick the next batch'].map(t => list.indexOf(t))
+  expect(list).not.toContain('Open a PR?')
+  const order = ['check ep04', '音樂：05 · pick the next batch'].map(t => list.indexOf(t))
   expect(order.every(i => i >= 0)).toBe(true)
   expect([...order].sort((a, b) => a - b)).toEqual(order)
   expect((await ui.find({ key: 'act:i:ai-video:f:0' }))?.text).toBe('play')
   expect((await ui.find({ key: 'act:i:ai-video:f:1' }))?.text).toBe('send back…')
-  // running and done conversations are not listed anywhere; the recap stays in its conversation
+  // no conversation is listed anywhere: the app's sidebar has them; the recap stays in its conversation
   expect(texts.some(t => /busy one|fix the bowl|Card added/.test(t))).toBe(false)
   expect(await ui.find({ key: 'conversations' })).toBeFalsy()
   expect(await ui.find({ key: 'empty' })).toBeFalsy()
-  await ui.unmount()
-})
-
-test('a question names its conversation; one the app never named goes by its question', { options: { status_dir: '/s' } }, async ($, on) => {
-  const { w } = world(on, {})
-  w.sessions['a.json'] = conversation({ id: 'a', isAppTitle: true, title: '產線程式健檢，寫 SPEC', recap: 'token 七天會過期', ask: '要我更新 README 嗎？' })
-  w.sessions['b.json'] = conversation({ id: 'b', title: 'new conversation', ask: '要發嗎？', updated: at(120_000) })
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const list = await listOf(ui)
-  expect(list).toMatch(/「產線程式健檢，寫 SPEC」問你：要我更新 README 嗎？/)
-  expect(list).toMatch(/對話問你：要發嗎？/)
-  expect(list).not.toMatch(/token 七天|new conversation/)
-  expect(list.match(/要發嗎？/g)).toHaveLength(1)
-  await ui.unmount()
-})
-
-test('a conversation whose last turn broke says so in the error color', { options: { status_dir: '/s' } }, async ($, on) => {
-  const { w } = world(on, {})
-  w.sessions['e.json'] = conversation({ id: 'e', isAppTitle: true, title: 'broke', state: 'error', ask: null })
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  await $.command.run(RUN)
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await listOf(ui)).toMatch(/出錯 「broke」的上一輪出錯了/)
-  expect((await ui.findAll({ type: 'Text' })).filter(t => t.props.color === 'error').map(textOf)).toContain('出錯 ')
   await ui.unmount()
 })
 
@@ -553,21 +527,19 @@ test('a group\'s wait is its oldest item by time, whatever offset each time is w
 
 test('more than 8 rows end in "▸ 還有 N 件", which opens the rest', { options: { status_dir: '/s' } }, async ($, on) => {
   const { w } = world(on, {
-    'music.json': status({ state: 'waiting', waiting: Array.from({ length: 6 }, (_, i) => ({ id: `s${i}`, text: `hear song ${i}` })) }),
+    'music.json': status({ state: 'waiting', waiting: Array.from({ length: 11 }, (_, i) => ({ id: `s${i}`, text: `hear song ${i}` })) }),
   })
-  for (let i = 0; i < 5; i++) w.sessions[`q${i}.json`] = conversation({ id: `q${i}`, isAppTitle: true, title: `asks ${i}`, ask: `question ${i}?`, updated: at((i + 1) * 60_000) })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.command.run(RUN)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await textsOf(ui)).toContain('11 件等你')
   expect((await ui.find({ key: 'more-all' }))?.text).toBe('▸ 還有 3 件')
   let list = await listOf(ui)
-  expect(list).toMatch(/question 4\?/)
-  expect(list).toMatch(/hear song 2/)
-  expect(list).not.toMatch(/hear song 3/)
+  expect(list).toMatch(/hear song 7/)
+  expect(list).not.toMatch(/hear song 8/)
   await ui.press({ key: 'more-all' })
   list = await listOf(ui)
-  for (let i = 3; i < 6; i++) expect(list).toMatch(`hear song ${i}`)
+  for (let i = 8; i < 11; i++) expect(list).toMatch(`hear song ${i}`)
   expect((await ui.find({ key: 'more-all' }))?.text).toBe('▾ 收起')
   expect(w.store.get('more:all')).toBe(true)
   await ui.unmount()
