@@ -104,19 +104,9 @@ declare module 'claude-code' {
   interface PluginState {
     'puppy-console': {
       snapshot: Snapshot | null
-      // the cards folded or opened by hand (pipeline → folded), where that differs from the default
-      folds: Record<string, boolean>
-      // the "older" group is open
-      isShowingOlder: boolean
-      // the conversations card's "done" group is open
-      isShowingDone: boolean
-      // "for you"'s "older" group of questions is open
-      isShowingOlderNeeds: boolean
-      // the waiting groups opened in "for you", by "<pipeline>:<group id>"
+      // the waiting groups opened in the list, by "<pipeline>:<group id>"
       openGroups: Record<string, boolean>
-      // the cards whose "▸ details" is open, by pipeline
-      openDetails: Record<string, boolean>
-      // the lists whose "▸ N more" is open: "needs", "running", "done", or a pipeline's waiting items
+      // "all" (the rest of a long list) and "pipelines" (each pipeline's details), when open
       openMore: Record<string, boolean>
       // this conversation's last write of its own file failed, and why
       writeError: string | null

@@ -133,15 +133,26 @@ export function sortCards(cards: Status[]): Status[] {
 
 export const titleOf = (s: Status) => s.title || s.pipeline
 
-// One unit, as precise as a glance needs: 5m ago, 8h ago, 3d ago.
+// One unit, as precise as a glance needs: 5 分鐘前, 8 小時前, 3 天前.
 export function ago(ms: number): string {
   const min = Math.round(ms / 60_000)
-  if (min < 1) return 'just now'
-  if (min < 60) return `${min}m ago`
+  if (min < 1) return '剛剛'
+  if (min < 60) return `${min} 分鐘前`
   const h = Math.floor(min / 60)
-  if (h < 48) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
+  if (h < 48) return `${h} 小時前`
+  return `${Math.floor(h / 24)} 天前`
 }
+
+// How long something has waited: ago() without 前.
+export const waited = (ms: number) => ago(ms).replace(/前$/, '')
+
+// The pane's own names for the pipelines it knows; any other goes by its title.
+const NAMES: Record<string, string> = { 'ai-video': '影片', music: '音樂' }
+export const pipeName = (s: Status) =>
+  NAMES[s.pipeline] ?? (s.pipeline.startsWith('collector-') && !s.title ? `收集 ${s.pipeline.slice('collector-'.length)}` : titleOf(s))
+
+// The words for a card's mark (markOf).
+export const STATE_WORDS: Record<State | 'quiet', string> = { running: '跑中', idle: '閒置', waiting: '等你', error: '出錯', quiet: '沒消息' }
 
 // A text progress bar for surfaces without Svg: ▓▓▓▓░░░░░░ 42/70 usable songs
 export function textBar(p: NonNullable<Status['progress']>, width = 10): string {
@@ -163,7 +174,7 @@ export const markOf = (s: Status, now: number) => (isStale(s, now) && s.state !=
 // Why a card went quiet, in words that don't guess the cause: the computer may sleep, the
 // pipeline may have stopped writing, or the sync may lag.
 export const quietWhy = (s: Status, now: number) =>
-  `no update for ${ago(now - Date.parse(s.updated)).replace(' ago', '')} from ${s.host ?? 'its computer'}`
+  `${waited(now - Date.parse(s.updated))}沒有更新（${s.host ?? '它的電腦'}）`
 const ALERT = new Set(['waiting', 'error', 'quiet'])
 
 // The lines to tell the person, comparing the last read with this one: a card that turned
@@ -180,42 +191,15 @@ export function alerts(prev: Snapshot | null, next: Snapshot): string[] {
     const items = s.waiting ?? []
     if (ALERT.has(mark) && mark !== wasMark) {
       const why = mark === 'quiet' ? quietWhy(s, next.loadedAt) : mark === 'waiting' && items[0] ? items[0].text : s.headline
-      out.push(`${titleOf(s)} · ${mark}: ${why}`)
+      out.push(`${pipeName(s)} · ${STATE_WORDS[mark]}：${why}`)
     } else if (was && items.length) {
       const seen = new Set((was?.waiting ?? []).map(w => w.id))
       const fresh = items.filter(w => !seen.has(w.id))
-      if (fresh.length) out.push(`${titleOf(s)} · new: ${fresh[0]!.text}${fresh.length > 1 ? ` (+${fresh.length - 1} more)` : ''}`)
+      if (fresh.length) out.push(`${pipeName(s)} · 新的：${fresh[0]!.text}${fresh.length > 1 ? `（還有 ${fresh.length - 1} 件）` : ''}`)
     }
   }
   return out
 }
 
 // A card waits for you while it is waiting or broken, or holds anything in its waiting list.
-// Such a card never moves into the "older" group, however old.
 export const waitsForYou = (s: Status) => s.state === 'waiting' || s.state === 'error' || (s.waiting ?? []).length > 0
-
-// Older: no update for more than three days (by "updated" only) and nothing waiting for you.
-// A future "updated" gives a negative age, so it is never older.
-export const OLDER_MS = 3 * 24 * 3_600_000
-export const isOlder = (s: Status, now: number) => !waitsForYou(s) && now - Date.parse(s.updated) > OLDER_MS
-
-// The cards of the pane and of the "older" group at the bottom. current keeps the order it was
-// given (sortCards); older is newest first. Done at every draw, since it depends on the time.
-export function splitCards(cards: Status[], now: number): { current: Status[]; older: Status[] } {
-  const older = cards.filter(s => isOlder(s, now))
-    .sort((a, b) => Date.parse(b.updated) - Date.parse(a.updated) || titleOf(a).localeCompare(titleOf(b)))
-  return { current: cards.filter(s => !older.includes(s)), older }
-}
-
-// A card is folded when the person folded it, else by its group: open among the current cards,
-// folded in the "older" group. Only a choice that differs from that default is kept, so a card
-// that moves between the groups follows its new group unless the person said otherwise.
-export const isFolded = (folds: Record<string, boolean>, pipeline: string, isOlderCard: boolean) =>
-  (Object.hasOwn(folds, pipeline) ? folds[pipeline] : undefined) ?? isOlderCard
-
-export function toggleFold(folds: Record<string, boolean>, pipeline: string, isOlderCard: boolean): Record<string, boolean> {
-  const next = !isFolded(folds, pipeline, isOlderCard)
-  const rest = { ...folds }
-  delete rest[pipeline]
-  return next === isOlderCard ? rest : { ...rest, [pipeline]: next }
-}

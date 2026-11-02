@@ -95,7 +95,10 @@ const PANE = {
 
 const entry = (name: string, kind: 'file' | 'dir' = 'file') => ({ name, kind, size: 1, mtimeMs: 0, isLink: false })
 
-test('the asking conversations come first, in "for you", with what each one asks', { options: { status_dir: '/s' } }, async ($, on) => {
+const textOf = (node: unknown): string =>
+  typeof node === 'string' ? node : ((node as { children?: unknown[] })?.children ?? []).map(textOf).join('')
+
+test('the asking conversations are left to the sidebar: only the pipeline waits in the list', { options: { status_dir: '/s' } }, async ($, on) => {
   const files: Record<string, string> = {
     '/home/me/.claude/console/sessions/a.json': conv({ id: 'a', state: 'waiting', isAppTitle: true, title: 'console sessions', recap: 'Card added.', ask: 'Open a PR?' }),
     '/home/me/.claude/console/sessions/b.json': conv({ id: 'b', state: 'done', title: 'fix the bowl' }),
@@ -122,23 +125,16 @@ test('the asking conversations come first, in "for you", with what each one asks
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
-    expect(texts.indexOf('conversations · 1')).toBeGreaterThan(-1)
-    expect(texts.indexOf('conversations · 1')).toBeLessThan(texts.indexOf('music'))
-    // one waits for you: the puppy sits (a picture on the desktop, its face on the terminal)
-    if (surface === 'desktop') expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('the puppy sitting')
-    else expect(texts.some(t => /ᴥ/.test(t ?? ''))).toBe(false)
-    expect(texts.some(t => /→\s*Open a PR\?/.test(t ?? ''))).toBe(true)
-    expect(texts).not.toContain('Card added.')
-    // done ones fold behind "▸ done 1" until opened
-    expect(texts.some(t => /fix the bowl/.test(t ?? ''))).toBe(false)
-    expect((await ui.find({ key: 'show-done' }))?.text).toMatch(/^▸ done 1/)
-    await ui.press({ key: 'show-done' })
-    expect(await ui.find({ type: 'Text', text: /fix the bowl/ })).toBeTruthy()
-    await ui.press({ key: 'show-done' })
+    const texts = (await ui.findAll({ type: 'Text' })).map(textOf)
+    expect(texts).toContain('1 件等你')
+    const list = textOf(await ui.find({ key: 'card-music' }))
+    expect(list).toContain('05 · 42/70')
+    expect(list).not.toContain('Open a PR?')
+    // something waits: no puppy
+    expect(await ui.findAll({ type: 'Svg' })).toEqual([])
+    expect(texts.some(t => /Card added|fix the bowl/.test(t))).toBe(false)
     // a file whose id is not its name is left out, with a word
-    expect(texts.some(t => /^x\b/.test(t ?? ''))).toBe(false)
-    expect(texts.some(t => /skipped sessions\/c\.json/.test(t ?? ''))).toBe(true)
+    expect(texts.some(t => /^略過 sessions\/c\.json/.test(t))).toBe(true)
     await ui.unmount()
   }
 })
@@ -223,7 +219,7 @@ test('conversations off: nothing is written and no card is drawn', { options: { 
   expect(lists.some(p => p.includes('.claude/console'))).toBe(false)
 })
 
-test('with no status folder set, the running conversation still shows, below the error', async ($, on) => {
+test('with no status folder set, the error shows, and the puppy types while a conversation runs', async ($, on) => {
   mock.env(on, { HOME: '/home/me' })
   mock.clock(on, { now: T + 60_000 })
   on('fs.list', (_, e) => ({ value: (e as { path: string }).path.endsWith('sessions') ? [entry('a.json')] : [] }))
@@ -232,12 +228,12 @@ test('with no status folder set, the running conversation still shows, below the
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  expect((await $.command.run({ command: 'console', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })).text).toBe('console opened.')
+  expect((await $.command.run({ command: 'console', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })).text).toBe('console 已打開。')
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text ?? '')
-  const running = texts.findIndex(t => /^· busy one/.test(t))
-  expect(running).toBeGreaterThan(texts.findIndex(t => /no status folder set/.test(t)))
-  expect(texts.findIndex(t => /no status folder set/.test(t))).toBeGreaterThan(-1)
-  expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('the puppy typing at its laptop')
+  const texts = (await ui.findAll({ type: 'Text' })).map(textOf)
+  expect(texts).toContain('讀不到狀態資料夾：no status folder set')
+  // a running conversation is not something to do: not listed, but the puppy types
+  expect(texts.some(t => /busy one/.test(t))).toBe(false)
+  expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('白白在打筆電')
   await ui.unmount()
 })

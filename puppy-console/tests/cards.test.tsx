@@ -1,9 +1,13 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import { byStage, collectorCounts, cut, MAX_SQUARES, picture, unknownStages } from '../hooks/draw'
-import { ago, alerts, expandHome, isFolded, isOlder, isOpenable, MAX_ACTIONS, parseActions, isStale, markOf, OLDER_MS, parseStatus, sortCards, splitCards, textBar, toggleFold } from '../hooks/format'
+import { ago, alerts, expandHome, isOpenable, MAX_ACTIONS, parseActions, isStale, markOf, parseStatus, pipeName, sortCards, textBar, waited } from '../hooks/format'
 import { lineText, view } from '../hooks/view'
+import { flowOf } from '../hooks/nodes'
 import type { Snapshot, Status } from '../types'
+
+const textOf = (node: unknown): string =>
+  typeof node === 'string' ? node : ((node as { children?: unknown[] })?.children ?? []).map(textOf).join('')
 
 const base = {
   format: 'pipeline-status',
@@ -70,13 +74,13 @@ test('alerts: a card turning waiting, error or quiet, and new waiting items', ()
   expect(alerts(null, running)).toEqual([])                                   // first read: baseline
   expect(alerts(running, snap(t + 60_000, { state: 'running', stale_after_sec: 360 }))).toEqual([])
   expect(alerts(running, snap(t, { state: 'waiting', waiting: [{ id: 'a', text: 'hear #7' }] })))
-    .toEqual(['music · waiting: hear #7'])
-  expect(alerts(running, snap(t, { state: 'error', headline: 'comfy is down' }))).toEqual(['music · error: comfy is down'])
-  expect(alerts(running, snap(t + 600_000, { state: 'running', stale_after_sec: 360 }))[0]).toMatch(/^music · quiet: no update for 10m/)
+    .toEqual(['音樂 · 等你：hear #7'])
+  expect(alerts(running, snap(t, { state: 'error', headline: 'comfy is down' }))).toEqual(['音樂 · 出錯：comfy is down'])
+  expect(alerts(running, snap(t + 600_000, { state: 'running', stale_after_sec: 360 }))[0]).toMatch(/^音樂 · 沒消息：10 分鐘沒有更新（它的電腦）$/)
   const w1 = snap(t, { state: 'waiting', waiting: [{ id: 'a', text: 'hear #7' }] })
   expect(alerts(w1, snap(t, { state: 'waiting', waiting: [{ id: 'a', text: 'hear #7' }] }))).toEqual([])   // nothing new
   expect(alerts(w1, snap(t, { state: 'waiting', waiting: [{ id: 'a', text: 'hear #7' }, { id: 'b', text: 'hear #9' }] })))
-    .toEqual(['music · new: hear #9'])
+    .toEqual(['音樂 · 新的：hear #9'])
   expect(alerts(running, snap(t, { state: 'idle' }))).toEqual([])               // back to idle is not news
 })
 
@@ -152,13 +156,11 @@ test('the pane draws one card per file and names the files it skipped', { option
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ type: 'Text', text: /42\/70 usable/ }))?.text).toBe('05 · 42/70 usable')
+    expect(textOf(await ui.find({ key: 'card-music' }))).toMatch(/hear song 7/)
     expect(await ui.findAll({ type: 'Text', text: /hear song 7/ })).toHaveLength(1)   // "next" repeating a waiting item is not shown
-    expect(await ui.find({ type: 'Text', text: /3 jobs, all done/ })).toBeTruthy()
-    // the summary is the same text on both surfaces; the job names wait in the folded details
-    expect((await ui.find({ type: 'Text', text: /^plan / }))?.text).toBe('plan 0 › clips 0 › voice 0 › compose 0 › final 1 › done 0')
-    expect(await ui.find({ type: 'Text', text: /ep04/ })).toBeFalsy()
-    expect((await ui.find({ type: 'Text', text: /skipped old\.json/ }))?.text).toMatch(/pipeline-status/)
+    // the idle one is a grey line under the cards
+    expect(textOf(await ui.find({ key: 'pipelines' }))).toMatch(/影片：閒置 · 3 jobs, all done/)
+    expect((await ui.find({ type: 'Text', text: /^略過 old\.json/ }))?.text).toMatch(/pipeline-status/)
     expect(await ui.find({ type: 'Text', text: /tmp/ })).toBeFalsy()
     await ui.unmount()
   }
@@ -173,40 +175,9 @@ test('no folder set: the pane says where to set it', async ($, on) => {
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.command.run({ command: 'console', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /status folder/ }))?.text).toMatch(/no status folder set/)
+  expect((await ui.find({ type: 'Text', text: /^讀不到狀態資料夾/ }))?.text).toBe('讀不到狀態資料夾：no status folder set')
+  expect(await ui.find({ type: 'Text', text: /\/config → puppy-console → status folder/ })).toBeTruthy()
   await ui.unmount()
-})
-
-test('older: more than three days without an update, and nothing waiting for you', () => {
-  const t = Date.parse(base.updated)
-  const idle = parseStatus(file({ state: 'idle' }))
-  expect(isOlder(idle, t + OLDER_MS)).toBe(false)               // exactly three days: not yet
-  expect(isOlder(idle, t + OLDER_MS + 1)).toBe(true)
-  expect(isOlder(idle, t - 60_000)).toBe(false)                 // an "updated" in the future
-  // quiet (stale) is not waiting: it folds away like any other old card
-  expect(isOlder(parseStatus(file({ state: 'running', stale_after_sec: 360 })), t + 4 * 86_400_000)).toBe(true)
-  // a card that waits for you never does, however old
-  for (const over of [{ state: 'waiting' }, { state: 'error' }, { state: 'idle', waiting: [{ id: 'a', text: 'hear #7' }] }])
-    expect(isOlder(parseStatus(file(over)), t + 10 * 86_400_000)).toBe(false)
-})
-
-test('the older cards go last, newest first; the rest keep their order', () => {
-  const t = Date.parse(base.updated)
-  const mk = (pipeline: string, state: string, daysOld: number) =>
-    parseStatus(file({ pipeline, state, updated: new Date(t - daysOld * 86_400_000).toISOString() }))
-  const cards = sortCards([mk('a', 'idle', 9), mk('b', 'idle', 4), mk('c', 'waiting', 30), mk('d', 'running', 0)])
-  const { current, older } = splitCards(cards, t)
-  expect(current.map(s => s.pipeline)).toEqual(['c', 'd'])
-  expect(older.map(s => s.pipeline)).toEqual(['b', 'a'])
-})
-
-test('a fold is kept only where it differs from the default of its group', () => {
-  expect(isFolded({}, 'music', false)).toBe(false)              // current cards start open
-  expect(isFolded({}, 'old', true)).toBe(true)                  // older cards start folded
-  expect(toggleFold({}, 'music', false)).toEqual({ music: true })
-  expect(toggleFold({ music: true }, 'music', false)).toEqual({})
-  expect(toggleFold({}, 'old', true)).toEqual({ old: false })
-  expect(toggleFold({ old: false, music: true }, 'old', true)).toEqual({ music: true })
 })
 
 const collector = (detail: object, pipeline = 'collector-tech-news') =>
@@ -218,8 +189,8 @@ const summaryOf = (s: Status) => view(s, Date.parse(base.updated)).summary.map(l
 test('a collector card: this run\'s counts side by side, no arrows (not a funnel), then what waits in notion', () => {
   const s = collector({ counts: COUNTS, errors: [] })
   expect(summaryOf(s)).toEqual([
-    'this run: collected 412 · new 58 · scored 58 · sent 9',
-    'to review in notion 27 · unsent 2',
+    '這次 收集 412 · 新 58 · 評分 58 · 送出 9',
+    'notion 待審 27 · 未送 2',
   ])
   // the review waits for you; its numbers are the whole story, so no picture in the details
   expect(view(s, 0).summary[1]!.parts[0]!.isYou).toBe(true)
@@ -228,9 +199,9 @@ test('a collector card: this run\'s counts side by side, no arrows (not a funnel
 
 test('a collector card: notion not read, and the 100 cap', () => {
   const unread = collector({ counts: { ...COUNTS, unsent: 0, pending: null } })
-  expect(summaryOf(unread)[1]).toBe('to review in notion ? (notion not read) · unsent 0')
+  expect(summaryOf(unread)[1]).toBe('notion 待審 ?（讀不到 notion） · 未送 0')
   expect(view(unread, 0).summary[1]!.parts[0]!.isYou).toBe(false)
-  for (const pending of [100, 140]) expect(summaryOf(collector({ counts: { ...COUNTS, pending } }))[1]).toMatch(/^to review in notion 100\+/)
+  for (const pending of [100, 140]) expect(summaryOf(collector({ counts: { ...COUNTS, pending } }))[1]).toMatch(/^notion 待審 100\+/)
   // a stage number that is missing or odd counts as 0
   expect(collectorCounts(collector({ counts: { collected: 3, new: 'x' } }))).toEqual({ collected: 3, new: 0, scored: 0, sent: 0, unsent: 0, pending: null })
 })
@@ -247,9 +218,9 @@ test('an older collector file (no counts) gives its progress, like any pipeline'
 test('a music card: the batch, then its songs; the songs to hear wait for you', () => {
   const s = parseStatus(file({ detail: { comfy: { up: true, running: 1, pending: 0 }, batches: [{ name: '06_讀書', generated: 70, ok: 19, needs_listen: 41, rejected: 10, errors: 2, avg_gen_sec: 840 }] } }))
   const v = view(s, 0)
-  expect(v.summary.map(lineText)).toEqual(['06_讀書', 'made 70 · ok 19 · to hear 41 · rejected 10 · failed 2 · 14 min / song'])
-  expect(v.summary[1]!.parts.filter(p => p.isYou).map(p => p.text)).toEqual(['to hear 41'])
-  expect(v.detailText).toEqual(['comfy up'])
+  expect(v.summary.map(lineText)).toEqual(['06_讀書', '做了 70 · 可用 19 · 待聽 41 · 退回 10 · 失敗 2 · 每首 14 分鐘'])
+  expect(v.summary[1]!.parts.filter(p => p.isYou).map(p => p.text)).toEqual(['待聽 41'])
+  expect(v.detailText).toEqual(['comfy 開著'])
   // nothing to hear: nothing marked
   const heard = parseStatus(file({ detail: { batches: [{ name: 'x', generated: 3, ok: 3, needs_listen: 0 }] } }))
   expect(view(heard, 0).summary[1]!.parts.some(p => p.isYou)).toBe(false)
@@ -258,31 +229,34 @@ test('a music card: the batch, then its songs; the songs to hear wait for you', 
 test('the details: the computer, the last output, and a "next" that is not already waiting', () => {
   const t = Date.parse(base.updated)
   const s = parseStatus(file({ host: 'studio-mac', last_output: { label: 'song #136', at: base.updated }, next: 'hear song 7', waiting: [{ id: 'a', text: 'hear song 7' }] }))
-  expect(view(s, t + 2 * 3_600_000).facts).toEqual(['on studio-mac', 'last: song #136 · 2h ago'])
-  expect(view(parseStatus(file({ next: 'make 10 more' })), t).facts).toEqual(['next: make 10 more'])
+  expect(view(s, t + 2 * 3_600_000).facts).toEqual(['在 studio-mac', '上次：song #136 · 2 小時前'])
+  expect(view(parseStatus(file({ next: 'make 10 more' })), t).facts).toEqual(['下一步：make 10 more'])
 })
 
 test('time in one unit, as a glance needs it', () => {
   const m = 60_000
-  expect(ago(20_000)).toBe('just now')
-  expect(ago(5 * m)).toBe('5m ago')
-  expect(ago(59 * m)).toBe('59m ago')
-  expect(ago(61 * m)).toBe('1h ago')
-  expect(ago(8 * 60 * m + 1 * m)).toBe('8h ago')
-  expect(ago(47 * 60 * m + 59 * m)).toBe('47h ago')
-  expect(ago(48 * 60 * m)).toBe('2d ago')
+  expect(ago(20_000)).toBe('剛剛')
+  expect(ago(5 * m)).toBe('5 分鐘前')
+  expect(ago(59 * m)).toBe('59 分鐘前')
+  expect(ago(61 * m)).toBe('1 小時前')
+  expect(ago(8 * 60 * m + 1 * m)).toBe('8 小時前')
+  expect(ago(47 * 60 * m + 59 * m)).toBe('47 小時前')
+  expect(ago(48 * 60 * m)).toBe('2 天前')
+  expect(waited(5 * m)).toBe('5 分鐘')
+  expect(waited(20_000)).toBe('剛剛')
+})
+
+test('the pane names the pipelines it knows in Chinese; any other goes by its title', () => {
+  expect(pipeName(parseStatus(file({ pipeline: 'ai-video' })))).toBe('影片')
+  expect(pipeName(parseStatus(file({})))).toBe('音樂')
+  expect(pipeName(parseStatus(file({ pipeline: 'collector-jobs' })))).toBe('收集 jobs')
+  expect(pipeName(parseStatus(file({ pipeline: 'other', title: 'Other' })))).toBe('Other')
 })
 
 test('a pipeline name holds only a-z, 0-9 and -; a waiting item with no id is known by its words', () => {
   expect(() => parseStatus(file({ pipeline: 'Music Box' }))).toThrow(/a-z/)
   expect(parseStatus(file({ pipeline: 'collector-tech-news' })).pipeline).toBe('collector-tech-news')
   expect(parseStatus(file({ waiting: [{ text: 'hear song 7' }] })).waiting).toEqual([{ id: 'hear song 7', text: 'hear song 7' }])
-})
-
-test('a pipeline named like an object key folds like any other', () => {
-  expect(isFolded({}, 'constructor', false)).toBe(false)
-  expect(isFolded({}, 'constructor', true)).toBe(true)
-  expect(isFolded({ constructor: true }, 'constructor', false)).toBe(true)
 })
 
 test('a stale error stays an error; a stale card otherwise is quiet', () => {
@@ -304,11 +278,11 @@ test('video: every stage in one row, the review gates marked when a job waits th
   expect(Object.values(lanes).flat()).toHaveLength(2)
   expect(unknownStages(s)).toEqual(['deliver: 電車'])
   const v = view(s, 0)
-  expect(v.summary.map(lineText)).toEqual(['plan 0 › clips 1 › voice 0 › compose 0 › final 1 › done 0', 'spent $0.49 of $42.50'])
+  expect(v.summary.map(lineText)).toEqual(['企劃 0 › 片段 1 › 配音 0 › 合成 0 › 成品 1 › 完成 0', '花了 $0.49 / $42.50'])
   // plan is a gate too, but nothing waits there
-  expect(v.summary[0]!.parts.filter(p => p.isYou).map(p => p.text)).toEqual(['final 1'])
+  expect(v.summary[0]!.parts.filter(p => p.isYou).map(p => p.text)).toEqual(['成品 1'])
   // the details name every job, whatever "for you" already says
-  expect(v.detailText).toEqual(['clips: ep05', 'final (you): ep04'])
+  expect(v.detailText).toEqual(['片段：ep05', '成品（你）：ep04'])
 })
 
 test('a video detail of an odd shape names nothing and throws nothing', () => {
@@ -343,4 +317,42 @@ test('the pane opens only things to look at or listen to, by a full path', () =>
   for (const no of ['v/ep04.mp4', '/Applications/Calculator.app', '/Applications/Calculator.app/', '/x/run.command',
     '/x/a.app/Contents/Resources/icon.png', '/v/../etc/a.mp4', '/x/script.sh', '/x/page.html', '/x/a.mp4\0', '-a/x.mp4'])
     expect([no, isOpenable(no)]).toEqual([no, false])
+})
+
+const NOW = Date.parse(base.updated) + 60_000
+const marks = (nodes: { label: string; state: string }[]) => nodes.map(n => `${n.state} ${n.label}`)
+
+test('an ai-video flow: the job at final is the subject, four steps done before its gate', () => {
+  const s = parseStatus(file({
+    pipeline: 'ai-video', state: 'waiting', headline: '1 at final',
+    detail: { jobs: [{ job: 'baibai/ep05', stage: 'clips', spend_usd: 0, cap_usd: 1 }, { job: 'baibai/ep04', stage: 'final', spend_usd: 0, cap_usd: 1 }] },
+    waiting: [{ id: 'f', text: 'check ep04', since: '2026-10-24T21:00:00+08:00' }],
+  }))
+  const f = flowOf(s, NOW)
+  expect(f.title).toBe('影片 · ep04 · 另有 1 支')
+  expect(marks(f.before)).toEqual(['done 企劃', 'done 片段', 'done 配音', 'done 合成'])
+  expect(f.gate).toMatchObject({ label: '成品', isError: false, waited: '1 小時' })
+  expect(f.gate?.items.map(w => w.id)).toEqual(['f'])
+  expect(f.after).toEqual([])
+  expect(f.count).toBe(1)
+})
+
+test('a music flow: songs to hear are the gate 你來聽, the usable count comes after', () => {
+  const s = parseStatus(file({
+    state: 'waiting',
+    detail: { generating: false, batches: [{ name: '05', generated: 88, ok: 42, target_usable: 70, rejected: 3, needs_listen: 2, strip: '' }] },
+    waiting: [{ id: 'l1', text: 'hear song 1' }, { id: 'l2', text: 'hear song 2' }],
+  }))
+  const f = flowOf(s, NOW)
+  expect(f.title).toBe('音樂 · 05')
+  expect(marks(f.before)).toEqual(['done 歌單', 'done 生成 88', 'done 檢查'])
+  expect(f.gate?.label).toBe('你來聽')
+  expect(marks(f.after)).toEqual(['todo 可用 42 / 70 · 退掉 3'])
+  expect(f.count).toBe(2)
+  // nothing to hear and running: no gate, every step in before, one line
+  const quiet = flowOf(parseStatus(file({ detail: { batches: [{ name: '05', generated: 40, needs_listen: 0 }] } })), NOW)
+  expect(quiet.gate).toBeNull()
+  expect(marks(quiet.before)[1]).toBe('running 生成 40')
+  expect(quiet.line).toBe('音樂：跑中 · 05 · 42/70 usable')
+  expect(quiet.count).toBe(0)
 })
