@@ -4,10 +4,10 @@ a pane beside the chat that answers one question: **what waits for you now?** (t
 
 ```
 ┌ console ───────────────────────────────────────────┐
-│ 2 件等你                         1 分鐘前 [重新整理] │
+│ 2 waiting for you                1 分鐘前 [重新整理] │
 │ 影片 · ep04                                         │
 │ ✓ 企劃 ─ ✓ 片段 ─ ✓ 配音 ─ ✓ 合成                    │
-│ ╭ 成品 ─────────────────────── 等你 · 23 小時 ╮      │
+│ ╭ 成品 ──────────────────── waiting · 23 小時 ╮      │
 │ │ check the final of ep04       [播放] [退回…] │      │
 │ ╰─────────────────────────────────────────────╯      │
 │ ◐ 音樂：跑中 · 05_autumn · 42/70 usable              │
@@ -20,7 +20,7 @@ a pane beside the chat that answers one question: **what waits for you now?** (t
   - one line under the cards says what the last press did, or why it could not.
 - a pipeline that broke gets a card too, with its error. past 5 things, `▸ 還有 N 件` opens the rest.
 - conversations that ask you something are not listed: the app's sidebar already shows them.
-- **the other pipelines are one grey line each:** their name, state and what they are doing. only `等你` has a color (and `出錯` its own).
+- **the other pipelines are one grey line each:** their name, state and what they are doing. only `waiting` has a color (and `出錯` its own).
 - **nothing waits:** the puppy and one sentence, `都處理完了`.
 - the pipelines only write; the mod only reads. each pipeline writes one small json file into a folder you pick ([FORMAT.md](FORMAT.md)). a new pipeline needs no change to the mod.
 - the folder is read only while the pane is open: once when you open it, then every minute.

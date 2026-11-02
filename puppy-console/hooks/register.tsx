@@ -463,7 +463,7 @@ export const register: Register = (on, options) => {
             <Box flexDirection="row" justifyContent="space-between" gap={1}>
               <Box flexShrink={1} minWidth={0}><Text weight="semibold" wrap="truncate-end">{g.label}</Text></Box>
               <Box flexShrink={0}>
-                <Text><Text color={g.isError ? 'error' : 'warning'}>{g.isError ? '出錯' : '等你'}</Text>{g.waited && <Text dimColor> · {g.waited}</Text>}</Text>
+                <Text><Text color={g.isError ? 'error' : 'warning'}>{g.isError ? '出錯' : 'waiting'}</Text>{g.waited && <Text dimColor> · {g.waited}</Text>}</Text>
               </Box>
             </Box>
             {g.note && <Text dimColor wrap="truncate-end">{g.note}</Text>}
@@ -509,7 +509,7 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={1}>
-          {count > 0 ? <Text><Text color="warning" weight="semibold">{count} 件等你</Text></Text> : <Text dimColor>{ago(now - snap.loadedAt)}看過</Text>}
+          {count > 0 ? <Text><Text color="warning" weight="semibold">{count} waiting for you</Text></Text> : <Text dimColor>{ago(now - snap.loadedAt)}看過</Text>}
           <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
             {count > 0 && <Text dimColor>{ago(now - snap.loadedAt)}</Text>}
             {/* no toast: what it finds shows right here */}

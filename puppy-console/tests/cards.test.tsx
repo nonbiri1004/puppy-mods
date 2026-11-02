@@ -74,7 +74,7 @@ test('alerts: a card turning waiting, error or quiet, and new waiting items', ()
   expect(alerts(null, running)).toEqual([])                                   // first read: baseline
   expect(alerts(running, snap(t + 60_000, { state: 'running', stale_after_sec: 360 }))).toEqual([])
   expect(alerts(running, snap(t, { state: 'waiting', waiting: [{ id: 'a', text: 'hear #7' }] })))
-    .toEqual(['音樂 · 等你：hear #7'])
+    .toEqual(['音樂 · waiting：hear #7'])
   expect(alerts(running, snap(t, { state: 'error', headline: 'comfy is down' }))).toEqual(['音樂 · 出錯：comfy is down'])
   expect(alerts(running, snap(t + 600_000, { state: 'running', stale_after_sec: 360 }))[0]).toMatch(/^音樂 · 沒消息：10 分鐘沒有更新（它的電腦）$/)
   const w1 = snap(t, { state: 'waiting', waiting: [{ id: 'a', text: 'hear #7' }] })
