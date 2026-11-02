@@ -384,6 +384,26 @@ test('two pipelines wait: the count, each flow\'s title, trails and card with it
   expect((await ui.find({ key: 'act:ai-video:f:0' }))?.text).toBe('play')
   expect((await ui.find({ key: 'act:ai-video:f:1' }))?.text).toBe('send back…')
   expect(await ui.find({ key: 'pipelines' })).toBeFalsy()
+  // a thin line joins the steps to the card, and the card to the steps after it
+  expect(texts.filter(t => t === '│')).toHaveLength(3)
+  // the marks carry the step's color: done green, running blue, not reached grey
+  const marks = (await ui.findAll({ type: 'Text' })).filter(t => ['✓', '◐', '○'].includes(textOf(t)))
+  expect(marks.filter(t => textOf(t) === '✓').every(t => t.props.color === 'success')).toBe(true)
+  expect(marks.find(t => textOf(t) === '○')?.props.color).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a pipeline with no steps known to the mod: its name heads the card, said once', { options: { status_dir: '/s' } }, async ($, on) => {
+  world(on, {
+    'collector-tech.json': status({ pipeline: 'collector-tech', title: '科技頻道選題', state: 'waiting', headline: '11 to review', waiting: [{ id: 'n', text: '在 Notion 審核 11 則', since: at(2 * DAY) }] }),
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const card = textOf(await ui.find({ key: 'card-collector-tech' }))
+  expect(card).toMatch(/^科技頻道選題等你 · 2 天在 Notion 審核 11 則/)
+  expect((await textsOf(ui)).filter(t => t === '科技頻道選題')).toHaveLength(1)
+  expect((await textsOf(ui)).includes('│')).toBe(false)
   await ui.unmount()
 })
 
@@ -431,7 +451,7 @@ test('a pipeline in error: its card has an error border, 出錯 in the error col
   expect(await textsOf(ui)).toContain('1 件等你')
   const card = await ui.find({ key: 'card-ai-video' })
   expect(card?.props.borderColor).toBe('error')
-  expect(textOf(card)).toBe('停下來了出錯 · 3 小時tts failed')
+  expect(textOf(card)).toBe('影片出錯 · 3 小時tts failed')
   expect((await ui.findAll({ type: 'Text' })).some(t => t.props.color === 'error' && textOf(t) === '出錯')).toBe(true)
   await ui.unmount()
 })
@@ -450,7 +470,7 @@ test('a card\'s wait is its oldest item by time, whatever offset each time is wr
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.command.run(RUN)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(textOf(await ui.find({ key: 'card-ai-video' }))).toMatch(/^等你等你 · 3 小時a/)
+  expect(textOf(await ui.find({ key: 'card-ai-video' }))).toMatch(/^影片等你 · 3 小時a/)
   await ui.unmount()
 })
 

@@ -6,7 +6,7 @@ import { cut, MASCOT_SCALE, mascot, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks }
 import type { Mood } from './draw'
 import { ago, alerts, expandHome, isOpenable, parseStatus, sortCards, waited } from './format'
 import { folderName, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
-import { flowOf, MARKS } from './nodes'
+import { flowOf, MARK_COLORS, MARKS } from './nodes'
 import type { Flow, FlowNode } from './nodes'
 
 const PANE = 'puppy-console'
@@ -280,7 +280,7 @@ function safeFlow(s: Status, now: number): Flow {
   try {
     return flowOf(s, now)
   } catch {
-    return { pipeline: s.pipeline, title: s.pipeline, before: [], gate: null, after: [], line: `${s.pipeline}：${s.headline}`, count: 0 }
+    return { pipeline: s.pipeline, title: s.pipeline, hasSteps: false, before: [], gate: null, after: [], line: `${s.pipeline}：${s.headline}`, count: 0 }
   }
 }
 
@@ -412,29 +412,42 @@ export const register: Register = (on, options) => {
     const quietFlows = flows.filter(f => !f.gate)
     const count = flows.reduce((n, f) => n + f.count, 0)
 
-    // ✓ 企劃 ─ ✓ 片段 ─ ◐ 生成 88: one grey line, the words give way at the edge
+    // ✓ 企劃 ─ ✓ 片段 ─ ◐ 生成 88: one line, the words give way at the edge. The marks carry the
+    // step's color (done green, running blue, as the mockup the person chose); the words stay grey.
     const trail = (key: string, nodes: FlowNode[]) => nodes.length > 0 && (
-      <Text key={key} dimColor wrap="truncate-end">{nodes.map(n => `${MARKS[n.state]} ${n.label}`).join(' ─ ')}</Text>
+      <Text key={key} wrap="truncate-end">
+        {nodes.map((n, i) => (
+          <Text>{i > 0 && <Text dimColor> ─ </Text>}<Text color={MARK_COLORS[n.state]} dimColor={!MARK_COLORS[n.state]}>{MARKS[n.state]}</Text><Text dimColor> {n.label}</Text></Text>
+        ))}
+      </Text>
     )
 
-    // One waiting item: its words, then its buttons, which never wrap.
+    // One waiting item: its words and how long it has waited on one row, its buttons on the row
+    // below, so a narrow pane never squeezes the words to make room for them.
     const item = (pipeline: string, w: WaitingItem) => {
-      const labels = (w.actions ?? []).map(a => (a.fill != null ? `${a.label}…` : a.label))
-      const right = labels.reduce((n, l) => n + l.length + 5, 0) + (w.since ? 8 : 0)
+      const age = sinceText(w.since)
+      const text = isTerminal ? cut(w.text, Math.max(8, cardColumns - (age ? age.length * 2 + 1 : 0))) : w.text
       return (
-        <Box key={`item:${pipeline}:${w.id}`} flexDirection="row" gap={1} alignItems="center">
-          <Box flexShrink={1} minWidth={0} flexGrow={1}>
-            <Text wrap="truncate-end">{isTerminal ? cut(w.text, Math.max(8, cardColumns - right)) : w.text}</Text>
+        <Box key={`item:${pipeline}:${w.id}`} flexDirection="column">
+          <Box flexDirection="row" gap={1}>
+            <Box flexShrink={1} minWidth={0} flexGrow={1}>
+              <Text wrap="truncate-end">{text}</Text>
+            </Box>
+            {age && <Box flexShrink={0}><Text dimColor>{age}</Text></Box>}
           </Box>
-          <Box flexShrink={0} flexDirection="row" gap={1} alignItems="center">
-            {w.since && <Text dimColor>{sinceText(w.since)}</Text>}
-            {(w.actions ?? []).map((a, i) => (
-              <Button key={`act:${pipeline}:${w.id}:${i}`} label={labels[i]!} onPress={() => pressAction($, a)} />
-            ))}
-          </Box>
+          {(w.actions ?? []).length > 0 && (
+            <Box flexDirection="row" gap={1} flexWrap="wrap">
+              {(w.actions ?? []).map((a, i) => (
+                <Button key={`act:${pipeline}:${w.id}:${i}`} label={a.fill != null ? `${a.label}…` : a.label} onPress={() => pressAction($, a)} />
+              ))}
+            </Box>
+          )}
         </Box>
       )
     }
+
+    // the thin line that joins a row of steps to the card, under the first mark
+    const stem = (key: string) => <Text key={key} dimColor>│</Text>
 
     const flow = (f: Flow) => {
       const g = f.gate!
@@ -442,8 +455,10 @@ export const register: Register = (on, options) => {
       const shown = isAll ? g.items : g.items.slice(0, MAX_ITEMS)
       return (
         <Box key={`flow-${f.pipeline}`} flexDirection="column" gap="xs">
-          <Text dimColor>{f.title}</Text>
+          {/* a pipeline with no steps known to the mod: its name is the card's own header */}
+          {f.hasSteps && <Text dimColor>{f.title}</Text>}
           {trail(`before-${f.pipeline}`, f.before)}
+          {f.before.length > 0 && stem(`stem-before-${f.pipeline}`)}
           <Box key={`card-${f.pipeline}`} flexDirection="column" borderStyle="round" borderColor={g.isError ? 'error' : 'warning'} paddingX={1} gap="xs">
             <Box flexDirection="row" justifyContent="space-between" gap={1}>
               <Box flexShrink={1} minWidth={0}><Text weight="semibold" wrap="truncate-end">{g.label}</Text></Box>
@@ -457,6 +472,7 @@ export const register: Register = (on, options) => {
               <Button key={`more-${f.pipeline}`} label={isAll ? '▾ 收起' : `▸ 還有 ${g.items.length - MAX_ITEMS} 件`} dimColor onPress={() => pressOpen($, 'more:', f.pipeline)} />
             )}
           </Box>
+          {f.after.length > 0 && stem(`stem-after-${f.pipeline}`)}
           {trail(`after-${f.pipeline}`, f.after)}
         </Box>
       )
@@ -484,7 +500,7 @@ export const register: Register = (on, options) => {
       <Box key="pipelines" flexDirection="column">
         {quietFlows.map(f => (
           <Text key={`line-${f.pipeline}`} dimColor wrap="truncate-end">
-            {snap.cards.find(s => s.pipeline === f.pipeline)?.state === 'running' ? MARKS.running : MARKS.done} {isTerminal ? cut(f.line, Math.max(8, e.props.bodyColumns - 2)) : f.line}
+            {(st => <Text color={MARK_COLORS[st]}>{MARKS[st]}</Text>)(snap.cards.find(s => s.pipeline === f.pipeline)?.state === 'running' ? 'running' : 'done')} {isTerminal ? cut(f.line, Math.max(8, e.props.bodyColumns - 2)) : f.line}
           </Text>
         ))}
       </Box>
