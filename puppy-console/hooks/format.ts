@@ -133,13 +133,14 @@ export function sortCards(cards: Status[]): Status[] {
 
 export const titleOf = (s: Status) => s.title || s.pipeline
 
-// One unit, as precise as a glance needs: 5 分鐘前, 8 小時前, 3 天前.
+// One unit, as precise as a glance needs: minutes within the hour, hours within the day, then
+// days: 5 分鐘前, 8 小時前, 3 天前.
 export function ago(ms: number): string {
   const min = Math.round(ms / 60_000)
   if (min < 1) return '剛剛'
   if (min < 60) return `${min} 分鐘前`
   const h = Math.floor(min / 60)
-  if (h < 48) return `${h} 小時前`
+  if (h < 24) return `${h} 小時前`
   return `${Math.floor(h / 24)} 天前`
 }
 
