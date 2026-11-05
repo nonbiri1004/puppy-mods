@@ -7,7 +7,7 @@ import type { Mood } from './draw'
 import { ago, alerts, expandHome, isOpenable, parseStatus, sortCards, waited } from './format'
 import { folderName, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
 import { DOTS, flowOf, MARK_COLORS, MARKS, STEM_SVG } from './nodes'
-import type { Flow, FlowNode } from './nodes'
+import type { Flow, FlowNode, NodeState } from './nodes'
 
 const PANE = 'puppy-console'
 const REFRESH_MS = 60_000
@@ -512,7 +512,7 @@ export const register: Register = (on, options) => {
       <Box key="pipelines" flexDirection="column">
         {quietFlows.map(f => (
           <Text key={`line-${f.pipeline}`} dimColor wrap="truncate-end">
-            {(st => <Text color={MARK_COLORS[st]}>{marks[st]}</Text>)(snap.cards.find(s => s.pipeline === f.pipeline)?.state === 'running' ? 'running' : 'done')} {isTerminal ? cut(f.line, Math.max(8, e.props.bodyColumns - 2)) : f.line}
+            {((st: NodeState) => <Text color={MARK_COLORS[st]}>{marks[st]}</Text>)(snap.cards.find(s => s.pipeline === f.pipeline)?.state === 'running' ? 'running' : 'done')} {isTerminal ? cut(f.line, Math.max(8, e.props.bodyColumns - 2)) : f.line}
           </Text>
         ))}
       </Box>

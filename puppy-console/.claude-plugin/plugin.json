@@ -1,6 +1,6 @@
 {
   "name": "puppy-console",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "description": "a pane that answers one question: what waits for you now. one row per thing, with its button; the pipelines in one line",
   "types": "./types/index.d.ts",
   "author": {

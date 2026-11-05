@@ -54,6 +54,9 @@ test('a wrap_up gives the recap and the question', () => {
 
 test('a conversation file parses; a wrong one throws', () => {
   expect(parseConversation(conv({ ask: 'PR?', project: 'puppy-mods' }))).toMatchObject({ id: 'a', ask: 'PR?', project: 'puppy-mods' })
+  // read back after a reload, the file still says its recap is a wrap_up's, so a later turn keeps it
+  expect(parseConversation(conv({ isWrapRecap: true })).isWrapRecap).toBe(true)
+  expect(parseConversation(conv({})).isWrapRecap).toBeUndefined()
   expect(() => parseConversation(conv({ format: 'pipeline-status' }))).toThrow()
   expect(() => parseConversation(conv({ state: 'busy' }))).toThrow()
   expect(() => parseConversation('{')).toThrow()
@@ -84,6 +87,9 @@ test('waiting first, newest first; old ones leave; a forgotten "running" is done
   ]
   expect(recent(sides, T).map(c => c.id)).toEqual(['typed'])
   expect(shownState(parseConversation(conv({ state: 'running', updated: at(RUNNING_MS - 1) })), T)).toBe('running')
+  // the fallback is for a crash, hours away, never a guess at a long turn: five hours in is still running
+  expect(shownState(parseConversation(conv({ state: 'running', updated: at(5 * 3_600_000) })), T)).toBe('running')
+  expect(shownState(parseConversation(conv({ state: 'running', updated: at(7 * 3_600_000) })), T)).toBe('done')
 })
 
 const PANE = {

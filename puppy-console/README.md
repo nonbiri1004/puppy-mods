@@ -26,7 +26,8 @@ a pane beside the chat that answers one question: **what waits for you now?** (t
 - the folder is read only while the pane is open: once when you open it, then every minute.
 - each conversation writes a short file about itself into `~/.claude/console/sessions/` (this computer only), so the puppy knows when one is running (it types) and a push can go out. turn it off with **conversations** in `/config`. when a conversation stops to ask you something, it sends a push through the app's PushNotification tool, if your permission settings already allow it; turn it off with **push**.
 - when a pipeline turns waiting, error or quiet, or gets a new waiting item, a short notice shows in the corner (once), only while the pane is open. turn notices off with **notices** in `/config`.
-- a file in the folder that isn't a status file is named at the bottom with the reason, never dropped without a word.
+- a file in the folder that isn't a status file is named at the bottom with the reason, never dropped without a word. the same for a folder the pane can't read, or a conversation that can't write its own file: one line at the bottom says so.
+- times are one unit, as a glance needs: `5 分鐘`, `8 小時`, `3 天` (minutes within the hour, hours within the day, then days).
 
 ## install
 

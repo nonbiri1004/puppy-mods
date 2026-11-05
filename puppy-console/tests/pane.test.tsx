@@ -20,8 +20,9 @@ const textOf = (node: unknown): string =>
 const rows = (bodyRows: number, bodyColumns = 80) => ({ ...PANE.props, bodyColumns, scroll: { offset: 0, bodyRows } })
 
 // The engine around the pane: a status folder /s holding `files` (changeable), the pane's
-// open/closed record, toasts, and a store in a Map the test can look into.
-function world(on: On, files: Record<string, string>, kept: Record<string, unknown> = {}) {
+// open/closed record, toasts, and a store in a Map the test can look into. A test that answers
+// env.get itself passes hasEnv false.
+function world(on: On, files: Record<string, string>, kept: Record<string, unknown> = {}, hasEnv = true) {
   const w = {
     files,
     reads: 0,
@@ -29,21 +30,28 @@ function world(on: On, files: Record<string, string>, kept: Record<string, unkno
     toasts: [] as string[],
     isOpen: false,
     isPanesBroken: false,
+    // the status folder refuses to list
+    isFolderBroken: false,
     opened: [] as Record<string, unknown>[],
-    // the conversations folder ~/.claude/console/sessions, by file name
+    // the conversations folder ~/.claude/console/sessions, by file name; while sessionsError is
+    // set, listing it fails with that error
     sessions: {} as Record<string, string>,
+    sessionsError: null as string | null,
     // each conversation file's time (default: now), and how many times each was read
     sessionTimes: {} as Record<string, number>,
     sessionReads: {} as Record<string, number>,
     store: new Map(Object.entries(kept)),
   }
-  mock.env(on, { HOME: '/home/me' })
+  if (hasEnv) mock.env(on, { HOME: '/home/me' })
   const clock = mock.clock(on, { now: T })
   on('fs.list', (_, e) => {
-    if (e.path === '/home/me/.claude/console/sessions')
+    if (e.path === '/home/me/.claude/console/sessions') {
+      if (w.sessionsError) return { deny: w.sessionsError }
       return { value: Object.keys(w.sessions).map(name => ({ name, kind: 'file', size: 1, mtimeMs: w.sessionTimes[name] ?? T, isLink: false })) }
+    }
     if (e.path !== '/s') return { value: [] }
     w.reads++
+    if (w.isFolderBroken) return { deny: 'EACCES: permission denied' }
     return { value: Object.keys(w.files).map(name => ({ name, kind: 'file', size: 1, mtimeMs: 0, isLink: false })) }
   })
   on('fs.read', (_, e) => {
@@ -226,6 +234,25 @@ test('a failed question about the panes does not stop the reading', { options: {
   expect(w.reads - before).toBe(2)
 })
 
+test('a read that fails before the folder keeps the last read, and the button does not throw', { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w, clock } = world(on, { 'music.json': status({ state: 'waiting', waiting: [{ id: 'a', text: 'hear song 1' }] }) }, {}, false)
+  let isHomeGone = false
+  on('env.get', (_, e) => (isHomeGone ? { deny: 'no env here' } : { value: e.name === 'HOME' ? '/home/me' : undefined }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  isHomeGone = true
+  await ui.press({ key: 'refresh' })
+  await clock.advance(60_000)
+  expect(textOf(await ui.find({ key: 'card-music' }))).toMatch(/hear song 1/)
+  // the next read goes on as before
+  isHomeGone = false
+  const before = w.reads
+  await clock.advance(60_000)
+  expect(w.reads - before).toBe(1)
+  await ui.unmount()
+})
+
 test('a file caught mid-write keeps its last card, and its notice is not told twice', { options: { status_dir: '/s' } }, async ($, on) => {
   const { w, clock } = world(on, { 'music.json': status({ state: 'running' }) })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -290,12 +317,16 @@ test('the desktop puppy is drawn interactive, so it moves', { options: { status_
 test('a conversation file is read again only when it changed; one past two weeks is not read', { options: { status_dir: '/s' } }, async ($, on) => {
   const { w, clock } = world(on, {})
   w.sessions['a.json'] = conversation({ id: 'a' })
+  // a question left open last week is still read: only the two-week limit goes by the file's time
+  w.sessions['week.json'] = conversation({ id: 'week', updated: at(5 * DAY) })
+  w.sessionTimes['week.json'] = T - 5 * DAY
   w.sessions['old.json'] = conversation({ id: 'old', updated: at(20 * DAY) })
   w.sessionTimes['old.json'] = T - 20 * DAY
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.command.run(RUN)
   await clock.advance(60_000)
   expect(w.sessionReads['a.json']).toBe(1)
+  expect(w.sessionReads['week.json']).toBe(1)
   expect(w.sessionReads['old.json']).toBeUndefined()
   w.sessions['a.json'] = conversation({ id: 'a', ask: 'Merge?' })
   w.sessionTimes['a.json'] = T + 1
@@ -316,6 +347,72 @@ test('a conversation file that does not parse is named, and its last read still 
   const texts = await textsOf(ui)
   expect(texts.some(t => /^略過 sessions\/b\.json：/.test(t))).toBe(true)
   expect(texts.some(t => /^略過 sessions\/a\.json：.*showing the last read/.test(t))).toBe(true)
+  await ui.unmount()
+})
+
+test('a folder that cannot be read is said in one line, never a silent empty pane', { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w, clock } = world(on, { 'music.json': status({ state: 'waiting', waiting: [{ id: 'a', text: 'hear song 1' }] }) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run(RUN)
+  const lineOf = async (ui: { find: (q: object) => Promise<{ text?: string } | null | undefined> }, start: string) => (await ui.find({ type: 'Text', text: new RegExp(`^${start}`) }))?.text
+
+  // the status folder: the error and where to set the folder; the next good read clears it
+  w.isFolderBroken = true
+  await clock.advance(60_000)
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await lineOf(ui, '讀不到狀態資料夾')).toMatch(/^讀不到狀態資料夾：.*EACCES: permission denied$/)
+  expect(await ui.find({ type: 'Text', text: /\/config → puppy-console → status folder/ })).toBeTruthy()
+  await ui.unmount()
+  w.isFolderBroken = false
+  await clock.advance(60_000)
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await lineOf(ui, '讀不到狀態資料夾')).toBeUndefined()
+  expect(textOf(await ui.find({ key: 'card-music' }))).toMatch(/hear song 1/)
+  await ui.unmount()
+
+  // the conversations folder: said when it refuses; a missing one is only "none yet"
+  w.sessionsError = 'EACCES: permission denied'
+  await clock.advance(60_000)
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await lineOf(ui, '讀不到對話資料夾')).toMatch(/^讀不到對話資料夾：.*EACCES: permission denied$/)
+  await ui.unmount()
+  w.sessionsError = 'ENOENT: no such file or directory'
+  await clock.advance(60_000)
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await lineOf(ui, '讀不到對話資料夾')).toBeUndefined()
+  await ui.unmount()
+})
+
+// A node of the pane as the test kit describes it.
+type Node = { type?: string; props: Record<string, unknown>; children?: unknown[] }
+const holding = (boxes: Node[], text: string) =>
+  boxes.find(b => (b.children ?? []).some(c => (c as Node).type === 'Text' && textOf(c) === text))
+
+const LONG = 'x'.repeat(100)
+
+for (const surface of ['terminal', 'desktop'] as const)
+test(`long words in a card give way at its edge, never past it (${surface})`, { options: { status_dir: '/s' } }, async ($, on) => {
+  const title = 'y'.repeat(60)
+  world(on, {
+    'collector-x.json': status({ pipeline: 'collector-x', title, state: 'waiting', waiting: [{ id: 'a', text: LONG }, { id: 'b', text: LONG, since: at(2 * DAY) }] }),
+  })
+  await $.session.start({ cwd: '/', surface, isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface })
+  if (surface === 'terminal') {
+    // cut by columns: the card has 4 fewer than the pane's 80, and the age keeps its own
+    expect(textOf(await ui.find({ key: 'item:collector-x:a' }))).toBe(`${'x'.repeat(75)}…`)
+    expect(textOf(await ui.find({ key: 'item:collector-x:b' }))).toBe(`${'x'.repeat(68)}…2 天`)
+  } else {
+    // whole, cut by the desktop at the edge: the Text truncates, and its Box may shrink below its words
+    const boxes = (await ui.findAll({ type: 'Box' })) as Node[]
+    const texts = (await ui.findAll({ type: 'Text' })) as Node[]
+    expect(textOf(await ui.find({ key: 'item:collector-x:a' }))).toBe(LONG)
+    for (const text of [LONG, title]) {
+      expect(texts.find(t => textOf(t) === text)?.props.wrap).toBe('truncate-end')
+      expect(holding(boxes, text)?.props).toMatchObject({ flexShrink: 1, minWidth: 0 })
+    }
+  }
   await ui.unmount()
 })
 
@@ -379,7 +476,7 @@ test('two pipelines wait: the count, each flow\'s title, trails and card with it
   expect(texts).toContain('○ 可用 42 / 70')
   const video = await ui.find({ key: 'card-ai-video' })
   expect(video?.props.borderColor).toBe('warning')
-  expect(textOf(video)).toMatch(/^成品waiting · 24 小時check ep04/)
+  expect(textOf(video)).toMatch(/^成品waiting · 1 天check ep04/)
   expect(textOf(await ui.find({ key: 'card-music' }))).toMatch(/^你來聽waiting/)
   expect((await ui.find({ key: 'act:ai-video:f:0' }))?.text).toBe('play')
   expect((await ui.find({ key: 'act:ai-video:f:1' }))?.text).toBe('send back…')
