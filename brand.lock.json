@@ -1,13 +1,13 @@
 {
   "_about": "Which baibai-brand version this repo's generated files come from. Written by baibai-brand `npm run sync`; do not edit.",
   "source": "nonbiri1004/baibai-brand",
-  "commit": "917ba81ab489e86c06d65f2255f47209c3d0920d",
+  "commit": "454e0deda3c39698668ae4265b5bd515bd424cda",
   "files": {
-    "puppy-console/hooks/puppy.ts": "sha256:3a5b8fb4d9949c566fb34cad139963aced1811ff86feda8ee28b6558505a8036",
-    "puppy-skills/hooks/puppy.ts": "sha256:3a5b8fb4d9949c566fb34cad139963aced1811ff86feda8ee28b6558505a8036",
-    "puppy-todo/hooks/puppy.ts": "sha256:3a5b8fb4d9949c566fb34cad139963aced1811ff86feda8ee28b6558505a8036",
-    "puppy-console/hooks/puppy-blocks.ts": "sha256:2edfd2a32b319c5a8a8599ee09468442bb7511b1299ed0dd099dde064572bd41",
-    "puppy-skills/hooks/puppy-blocks.ts": "sha256:2edfd2a32b319c5a8a8599ee09468442bb7511b1299ed0dd099dde064572bd41",
-    "puppy-todo/hooks/puppy-blocks.ts": "sha256:2edfd2a32b319c5a8a8599ee09468442bb7511b1299ed0dd099dde064572bd41"
+    "puppy-console/hooks/puppy.ts": "sha256:6c875ba3aa38ab2d840a3a771719ca3392ee4dda656669661ddc0fb66d9a2210",
+    "puppy-skills/hooks/puppy.ts": "sha256:6c875ba3aa38ab2d840a3a771719ca3392ee4dda656669661ddc0fb66d9a2210",
+    "puppy-todo/hooks/puppy.ts": "sha256:6c875ba3aa38ab2d840a3a771719ca3392ee4dda656669661ddc0fb66d9a2210",
+    "puppy-console/hooks/puppy-blocks.ts": "sha256:9299052a813592a3bccbe544e595da83c840ffee4a3c047057e4409ab5406df8",
+    "puppy-skills/hooks/puppy-blocks.ts": "sha256:9299052a813592a3bccbe544e595da83c840ffee4a3c047057e4409ab5406df8",
+    "puppy-todo/hooks/puppy-blocks.ts": "sha256:9299052a813592a3bccbe544e595da83c840ffee4a3c047057e4409ab5406df8"
   }
 }
