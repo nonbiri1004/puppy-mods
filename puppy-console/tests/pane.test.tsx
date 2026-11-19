@@ -725,3 +725,24 @@ test('more than 5 rows in a section end in "▸ 還有 N 件", kept open by sect
   expect(w.store.get('more:dispatch/queued')).toBe(true)
   await ui.unmount()
 })
+
+test('the rest of a long list counts each item of a folded group', { options: { status_dir: '/s' } }, async ($, on) => {
+  world(on, { 'music.json': status({ state: 'waiting', waiting_groups: [{ id: 'b', label: '待決定' }], waiting: [
+    ...Array.from({ length: 5 }, (_, i) => ({ id: `s${i}`, text: `hear song ${i}` })),
+    ...Array.from({ length: 3 }, (_, i) => ({ id: `d${i}`, text: `decide ${i}`, group: 'b' })),
+  ] }) })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ key: 'more-music' }))?.text).toBe('▸ 還有 3 件')
+  await ui.unmount()
+})
+
+test('a board card takes the same name as the pipeline\'s other card', { options: { status_dir: '/s' } }, async ($, on) => {
+  world(on, { 'music.json': status({ title: 'Music', sections: [{ id: 'q', label: '排隊中 1', rows: [{ text: 'next batch' }] }] }) })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(textOf(await ui.find({ key: 'card-board-music' }))).toMatch(/^音樂/)
+  await ui.unmount()
+})

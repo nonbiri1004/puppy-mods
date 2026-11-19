@@ -4,7 +4,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { Conversation, Problem, Section, Snapshot, Status, WaitingAction, WaitingItem } from '../types'
 import { cut, MASCOT_SCALE, mascot, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks } from './draw'
 import type { Mood } from './draw'
-import { ago, alerts, expandHome, isOpenable, markOf, parseStatus, sortCards, STATE_WORDS, titleOf, waited, waitingEntries } from './format'
+import { ago, alerts, expandHome, isOpenable, markOf, parseStatus, pipeName, sortCards, STATE_WORDS, waited, waitingEntries } from './format'
 import { folderName, isSideChatTitle, isWrapUp, KEEP_MS, KEEP_WAITING_MS, nameOf, oneLine, parseConversation, plainLine, promptName, recent, SESSIONS, shownState, wrapOf } from './sessions'
 import { DOTS, flowOf, MARK_COLORS, MARKS, STEM_SVG } from './nodes'
 import type { Flow, FlowNode, NodeState } from './nodes'
@@ -469,6 +469,8 @@ export const register: Register = (on, options) => {
       const s = snap.cards.find(c => c.pipeline === f.pipeline)
       const entries = waitingEntries({ ...(s ?? { waiting_groups: [] }), waiting: g.items } as Status)
       const shown = isAll ? entries : entries.slice(0, MAX_ITEMS)
+      // a folded group still counts each of its items (FORMAT.md)
+      const hidden = entries.slice(MAX_ITEMS).reduce((n, en) => n + ('group' in en ? en.items.length : 1), 0)
       const groupRow = (group: { id: string; label: string }, items: WaitingItem[]) => {
         const key = `${f.pipeline}:${group.id}`
         const isOpen = openedGroups[key] === true
@@ -498,7 +500,7 @@ export const register: Register = (on, options) => {
             {g.note && <Text dimColor wrap="truncate-end">{g.note}</Text>}
             {shown.map(en => ('group' in en ? groupRow(en.group, en.items) : item(f.pipeline, en.item)))}
             {entries.length > MAX_ITEMS && (
-              <Button key={`more-${f.pipeline}`} label={isAll ? '▾ 收起' : `▸ 還有 ${entries.length - MAX_ITEMS} 件`} dimColor onPress={() => pressOpen($, 'more:', f.pipeline)} />
+              <Button key={`more-${f.pipeline}`} label={isAll ? '▾ 收起' : `▸ 還有 ${hidden} 件`} dimColor onPress={() => pressOpen($, 'more:', f.pipeline)} />
             )}
           </Box>
           {f.after.length > 0 && stem(`stem-after-${f.pipeline}`)}
@@ -538,7 +540,7 @@ export const register: Register = (on, options) => {
     const board = (s: Status) => (
       <Box key={`card-board-${s.pipeline}`} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
         <Box flexDirection="row" justifyContent="space-between" gap={1}>
-          <Box flexShrink={1} minWidth={0}><Text weight="semibold" wrap="truncate-end">{titleOf(s)}</Text></Box>
+          <Box flexShrink={1} minWidth={0}><Text weight="semibold" wrap="truncate-end">{pipeName(s)}</Text></Box>
           <Box flexShrink={0}><Text dimColor>{STATE_WORDS[markOf(s, now)]} · {ago(now - Date.parse(s.updated))}</Text></Box>
         </Box>
         <Text dimColor wrap="truncate-end">{isTerminal ? cut(s.headline, cardColumns) : s.headline}</Text>
