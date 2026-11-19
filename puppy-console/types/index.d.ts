@@ -13,6 +13,11 @@ export type WaitingAction = { label: string; open?: string; fill?: string }
 export type WaitingItem = { id: string; text: string; since?: string; group?: string; actions?: WaitingAction[] }
 export type WaitingGroup = { id: string; label: string }
 
+// A list a pipeline wants shown on its own card (FORMAT.md, "sections"): a dim label, then one line
+// per row; at is when the row last changed, drawn as an age on its right.
+export type SectionRow = { text: string; at?: string }
+export type Section = { id: string; label: string; rows: SectionRow[] }
+
 export type Status = {
   format: 'pipeline-status'
   version: 1
@@ -26,6 +31,7 @@ export type Status = {
   progress?: { done: number; total: number | null; unit?: string } | null
   waiting?: WaitingItem[]
   waiting_groups?: WaitingGroup[]
+  sections?: Section[]
   last_output?: { label: string; at?: string; path?: string } | null
   next?: string | null
   detail?: { [key: string]: Json } | null
@@ -107,7 +113,8 @@ declare module 'claude-code' {
       snapshot: Snapshot | null
       // the waiting groups opened in the list, by "<pipeline>:<group id>"
       openGroups: Record<string, boolean>
-      // "all" (the rest of a long list) and "pipelines" (each pipeline's details), when open
+      // the rest of a long list, when open: a waiting card's by "<pipeline>", a section's by
+      // "<pipeline>/<section id>"
       openMore: Record<string, boolean>
       // this conversation's last write of its own file failed, and why
       writeError: string | null

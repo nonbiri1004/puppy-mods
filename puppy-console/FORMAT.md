@@ -44,6 +44,7 @@ every pipeline writes one small json file into one shared folder. the mod reads 
 | `progress` | no | `{ done, total, unit }` for a progress bar; `total` can be `null` when there is no end |
 | `waiting` | no | things only you can do (listen, approve, drop a file in). `id` stays the same while the item waits, so a later to-do or button can point at it. `since` is when it began to wait. `group` puts it in one of `waiting_groups`. `actions` gives it buttons, below |
 | `waiting_groups` | no | names for kinds of waiting items, `[{ id, label }]`, below |
+| `sections` | no | lists to show on the pipeline's own card, `[{ id, label, rows }]`, below. new in version 1: older files and older mods simply leave it out |
 | `last_output` | no | the newest thing it made: `{ label, at, path? }` |
 | `next` | no | the next step, in words |
 | `detail` | no | anything the pipeline wants to show more of. the mod draws a few known ones (below); for others it shows nothing extra |
@@ -70,6 +71,24 @@ when a pipeline has several items of one kind (three finals to review), it can n
 - the pipeline decides the group where it makes the item. the pane never guesses a kind from an item's words.
 - a group is only how it shows: each item keeps its own id and buttons, and still counts on its own.
 - a group with one item, an item whose `group` is not in `waiting_groups`, and a group without an id or a label: the item shows on its own, as if it had no group.
+
+## sections
+
+a pipeline that wants more than one line can name a few lists, and the pane draws them on a card of its own, below what waits for you, in place of the pipeline's grey line, whatever its state:
+
+```json
+"sections": [
+  { "id": "running", "label": "進行中 2", "rows": [{ "text": "T7 make the intro", "at": "2026-11-19T15:10:00+08:00" }, { "text": "T9 fix the cover" }] },
+  { "id": "queued", "label": "排隊中 1", "rows": [{ "text": "T12 new song list" }] },
+  { "id": "done", "label": "這週做完 14 件", "rows": [] }
+]
+```
+
+- the card shows the pipeline's title, its state and when it wrote, its `headline`, then each section: `label` as a dim line, then one line per row. `at` (optional, iso 8601) is when the row last changed; the pane shows how long ago on the row's right.
+- `id` is what the pane remembers an opened list by; keep it the same. `label` is at most 40 characters, in the pipeline's own words; put a count in it when it helps (`進行中 2`). a section with no rows is just its label.
+- past 5 rows, `▸ 還有 N 件` opens the rest. a row is at most 200 characters (longer ones are cut); a narrow pane cuts it at its edge, so put what matters first.
+- at most 8 sections. a section without an id or a short label, a second one with the same id, and a row without `text` are left out.
+- what waits for you stays in `waiting`: the pane says it once, at the top, so don't list it again in a section.
 
 ## writing it
 

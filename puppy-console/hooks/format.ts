@@ -1,5 +1,5 @@
 // Reading one status file (FORMAT.md). Pure functions, so the tests need no engine.
-import type { Snapshot, State, Status, WaitingAction, WaitingGroup, WaitingItem } from '../types'
+import type { Section, Snapshot, State, Status, WaitingAction, WaitingGroup, WaitingItem } from '../types'
 
 const STATES: readonly State[] = ['running', 'idle', 'waiting', 'error']
 
@@ -50,6 +50,7 @@ export function parseStatus(text: string): Status {
       }
     }),
     waiting_groups: parseGroups(v.waiting_groups),
+    sections: parseSections(v.sections),
   }
 }
 
@@ -64,6 +65,29 @@ function parseGroups(v: unknown): WaitingGroup[] {
     const label = typeof g.label === 'string' ? g.label.trim() : ''
     return id && label && [...label].length <= MAX_GROUP_LABEL ? [{ id, label }] : []
   })
+}
+
+export const MAX_SECTIONS = 8
+const MAX_ROW = 200
+
+// A file's sections. One without an id or a short label is dropped, and so is a row without
+// words; a row's words past MAX_ROW are cut, a time that is not a time is left off.
+function parseSections(v: unknown): Section[] {
+  if (!Array.isArray(v)) return []
+  const seen = new Set<string>()
+  return v.filter(isObject).flatMap(sec => {
+    const id = typeof sec.id === 'string' ? sec.id.trim() : ''
+    const label = typeof sec.label === 'string' ? sec.label.trim() : ''
+    if (!id || seen.has(id) || !label || [...label].length > MAX_GROUP_LABEL) return []
+    seen.add(id)
+    const rows = (Array.isArray(sec.rows) ? sec.rows : []).filter(isObject).flatMap(r => {
+      const text = typeof r.text === 'string' ? r.text.trim() : ''
+      if (!text) return []
+      const at = typeof r.at === 'string' && !Number.isNaN(Date.parse(r.at)) ? r.at : undefined
+      return [{ text: [...text].length > MAX_ROW ? `${[...text].slice(0, MAX_ROW - 1).join('')}…` : text, ...(at ? { at } : {}) }]
+    })
+    return [{ id, label, rows }]
+  }).slice(0, MAX_SECTIONS)
 }
 
 // What "for you" lists for one pipeline, in the file's order: the items of a named group of two

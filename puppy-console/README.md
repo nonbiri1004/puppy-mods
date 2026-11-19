@@ -20,6 +20,7 @@ a pane beside the chat that answers one question: **what waits for you now?** (t
   - one line under the cards says what the last press did, or why it could not.
 - a pipeline that broke gets a card too, with its error. past 5 things, `▸ 還有 N 件` opens the rest.
 - conversations that ask you something are not listed: the app's sidebar already shows them.
+- **a pipeline that writes `sections` gets a card of its own** below that, whatever its state: its name, state and headline, then each list (a dim label, one line per row, how long ago on the right). past 5 rows, `▸ 還有 N 件` opens the rest. ([FORMAT.md](FORMAT.md), sections.)
 - **the other pipelines are one grey line each:** their name, state and what they are doing. only `waiting` has a color (and `出錯` its own).
 - **nothing waits:** the puppy and one sentence, `都處理完了`.
 - the pipelines only write; the mod only reads. each pipeline writes one small json file into a folder you pick ([FORMAT.md](FORMAT.md)). a new pipeline needs no change to the mod.
