@@ -360,3 +360,22 @@ test('a music flow: songs to hear are the gate 你來聽, the usable count comes
   expect(quiet.line).toBe('音樂：跑中 · 05 · 42/70 usable')
   expect(quiet.count).toBe(0)
 })
+
+test('sections: an odd section or row is dropped, never the file; long rows are cut', () => {
+  const s = parseStatus(file({
+    sections: [
+      { id: 'running', label: '進行中 2', rows: [{ text: 'T7 intro', at: '2026-11-19T15:10:00+08:00' }, { text: 'T9', at: 'soon' }, { text: '' }, 'junk', { text: 'x'.repeat(250) }] },
+      { id: 'running', label: 'again' },
+      { id: 'done', label: '這週做完 3 件' },
+      { label: 'no id' }, { id: 'long', label: 'x'.repeat(41) }, 'junk',
+    ],
+  }))
+  expect(s.sections?.map(x => x.id)).toEqual(['running', 'done'])
+  const rows = s.sections![0].rows
+  expect(rows.slice(0, 2)).toEqual([{ text: 'T7 intro', at: '2026-11-19T15:10:00+08:00' }, { text: 'T9' }])
+  expect([...rows[2].text]).toHaveLength(200)
+  expect(rows[2].text.endsWith('…')).toBe(true)
+  expect(s.sections![1].rows).toEqual([])
+  expect(parseStatus(file({ sections: 'nope' })).sections).toEqual([])
+  expect(parseStatus(file({ sections: Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, label: `s${i}` })) })).sections).toHaveLength(8)
+})

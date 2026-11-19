@@ -662,3 +662,66 @@ test(`a fill button starts a message in the prompt box (draft "${draft}")`, { op
   expect(await noteOf(ui)).toMatch(/輸入框沒有收下/)
   await ui.unmount()
 })
+
+const board = (over: object = {}) => status({
+  pipeline: 'dispatch', title: '任務板', state: 'running', headline: '進行 2 · 排隊 1 · 等你 1',
+  sections: [
+    { id: 'head', label: '主控', rows: [{ text: '主控 Dispatch（local_abc）' }, { text: '下一號 T12' }] },
+    { id: 'running', label: '進行中 2', rows: [{ text: 'T7 make the intro', at: at(2 * 3_600_000) }, { text: 'T9 fix the cover' }] },
+    { id: 'done', label: '這週做完 14 件', rows: [] },
+  ],
+  ...over,
+})
+
+for (const surface of ['terminal', 'desktop'] as const)
+test(`a pipeline with sections gets its own card, in place of its grey line (${surface})`, { options: { status_dir: '/s' } }, async ($, on) => {
+  world(on, { 'dispatch.json': board(), 'music.json': status({}) })
+  await $.session.start({ cwd: '/', surface, isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface })
+  const card = textOf(await ui.find({ key: 'card-board-dispatch' }))
+  expect(card).toContain('任務板')
+  expect(card).toContain('跑中 · 1 分鐘前')
+  expect(card).toContain('進行 2 · 排隊 1 · 等你 1')
+  expect(card).toContain('主控 Dispatch（local_abc）')
+  expect(card).toContain('T7 make the intro')
+  expect(card).toContain('2 小時前')
+  expect(card).toContain('這週做完 14 件')
+  // nothing waits: the puppy still says so; the board is not a grey line too
+  expect(textOf(await ui.find({ key: 'empty' }))).toMatch(/都處理完了$/)
+  expect(textOf(await ui.find({ key: 'pipelines' }))).toBe('◐ 音樂：跑中 · 05 · 42/70 usable')
+  await ui.unmount()
+})
+
+test('a board that also waits: the waiting card on top, the board below, the items said once', { options: { status_dir: '/s' } }, async ($, on) => {
+  world(on, { 'dispatch.json': board({ waiting: [{ id: 'm1', text: '合併 repo#1', group: 'a' }, { id: 'm2', text: '合併 repo#2', group: 'a' }], waiting_groups: [{ id: 'a', label: '要你合併或決定' }] }) })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await textsOf(ui)).toContain('2 waiting for you')
+  // the two items of one group are one row that opens in place
+  expect(textOf(await ui.find({ key: 'card-dispatch' }))).not.toContain('合併 repo#1')
+  expect((await ui.find({ key: 'group-dispatch:a' }))?.text).toBe('▸ 要你合併或決定 ×2')
+  await ui.press({ key: 'group-dispatch:a' })
+  expect(textOf(await ui.find({ key: 'card-dispatch' }))).toContain('合併 repo#2')
+  expect((await ui.find({ key: 'group-dispatch:a' }))?.text).toBe('▾ 要你合併或決定 ×2')
+  const card = textOf(await ui.find({ key: 'card-board-dispatch' }))
+  expect(card).toContain('進行中 2')
+  expect(card).not.toContain('合併 repo#1')
+  expect(await ui.find({ key: 'pipelines' })).toBeFalsy()
+  await ui.unmount()
+})
+
+test('more than 5 rows in a section end in "▸ 還有 N 件", kept open by section', { options: { status_dir: '/s' } }, async ($, on) => {
+  const { w } = world(on, { 'dispatch.json': board({ sections: [{ id: 'queued', label: '排隊中 7', rows: Array.from({ length: 7 }, (_, i) => ({ text: `T${i} job` })) }] }) })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const cardOf = async () => textOf(await ui.find({ key: 'card-board-dispatch' }))
+  expect((await ui.find({ key: 'more-dispatch/queued' }))?.text).toBe('▸ 還有 2 件')
+  expect(await cardOf()).not.toContain('T5 job')
+  await ui.press({ key: 'more-dispatch/queued' })
+  expect(await cardOf()).toContain('T6 job')
+  expect(w.store.get('more:dispatch/queued')).toBe(true)
+  await ui.unmount()
+})
