@@ -2,7 +2,7 @@
 
 - **What this is:** small claude code mods kept by the lofi puppy: puppy-todo, puppy-console, puppy-skills.
 - **What this isn't:** the puppy's apps, games or music; those live in other (private) repos.
-- **Related:** each mod's `hooks/puppy.ts` and `hooks/puppy-blocks.ts` are generated from baibai-brand; baibai-music, ai-video-pipeline and info-collector write the status files puppy-console shows.
+- **Related:** each mod's `hooks/puppy.ts` and `hooks/puppy-blocks.ts` are generated from baibai-brand; baibai-music, ai-video-pipeline, info-collector and projects-map write the status files puppy-console shows.
 
 small, quiet mods for [claude code](https://claude.com/claude-code), kept by the lofi puppy.
 

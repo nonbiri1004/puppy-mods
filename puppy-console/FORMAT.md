@@ -83,7 +83,7 @@ when a pipeline has several items of one kind (three finals to review), it can n
 the mod draws these when `pipeline` matches; anything else in `detail` is ignored.
 
 - `music`: `{ comfy: { up, running, pending }, generating, batches: [{ name, strip, est_usable, target_usable, generated, ok, needs_listen, rejected, errors, avg_gen_sec, status_tail }] }`. `strip` has one letter per song: `o` ok, `l` to hear, `r` rejected, `x` left out, `e` failed, `?` being checked. the pipeline's details show the first batch: its name, then made · ok · to hear · rejected (and failed, and the minutes per song).
-- `ai-video`: `{ spend_usd, cap_usd, jobs: [{ job, stage, spend_usd, cap_usd, updated, next }] }`. `stage` is `plan`, `clips`, `voice`, `compose`, `final` or `done`; the pipeline's details count the jobs at every stage, then the spend, and name them by stage.
+- `ai-video`: `{ spend_usd, cap_usd, jobs: [{ job, stage, spend_usd, cap_usd, updated, next }] }`. `stage` is `plan`, `clips`, `voice`, `compose`, `final` or `done` (ai-video-pipeline also writes `deliver`: the final was approved but copying it out failed; the mod doesn't draw that stage yet); the pipeline's details count the jobs at every stage, then the spend, and name them by stage.
 - `collector-*` (info-collector, one file per profile, e.g. `collector-tech-news`; matched by the prefix): `{ counts: { collected, new, scored, sent, unsent, pending }, errors: [text] }`.
   - `collected`, `new`, `scored` and `sent` are this run. `scored` can be more than `new` (older unscored items are scored too), and `sent` can be more than `scored` (earlier runs' picks).
   - `unsent`: high-scored items not in notion yet (sent next run, or refused).

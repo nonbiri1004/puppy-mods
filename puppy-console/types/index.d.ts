@@ -52,6 +52,7 @@ export type MusicDetail = {
 }
 
 // detail of pipeline "ai-video" (ai-video-pipeline)
+// ai-video-pipeline can also write 'deliver' (copying the approved final failed); not drawn yet, see FORMAT.md
 export type Stage = 'plan' | 'clips' | 'voice' | 'compose' | 'final' | 'done'
 export type VideoJob = { job: string; stage: Stage; spend_usd: number; cap_usd: number; updated?: string; next?: string }
 export type VideoDetail = { spend_usd?: number; cap_usd?: number; jobs?: VideoJob[] }
