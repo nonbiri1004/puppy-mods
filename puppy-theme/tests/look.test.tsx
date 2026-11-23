@@ -20,10 +20,9 @@ test('every palette uses only names the app knows, and Desktop paints it', () =>
   }
 })
 
-test('no palette carries orange: in the brand it is the headphones alone', () => {
-  for (const name of NAMES) {
-    expect(JSON.stringify(PALETTES[name]).toLowerCase()).not.toMatch(/#f08a3c|#d65d0e|#fe8019|#af3a03/)
-  }
+test('the warm greys carry no orange: in the brand it is the headphones alone', () => {
+  // gruvbox keeps its own orange (the person's choice, 2026-11-23)
+  expect(JSON.stringify(PALETTES.warm).toLowerCase()).not.toMatch(/#f08a3c|#d65d0e|#fe8019|#af3a03/)
 })
 
 test('the scenes are pure vector, slow and small enough', () => {

@@ -1,5 +1,7 @@
-// The palettes this look can wear. Both keep the brand's rule: no orange
-// (in baibai-brand, orange belongs to the puppy's headphones alone).
+// The palettes this look can wear. The warm greys keep the brand's rule of no
+// orange (in baibai-brand, orange belongs to the puppy's headphones alone);
+// the gruvbox option keeps gruvbox's own colors, orange included (the person
+// chose this on 2026-11-23: picking gruvbox steps outside the brand anyway).
 
 export type Hex = `#${string}`
 
@@ -43,7 +45,7 @@ export const WARM: Palette = {
 }
 
 // Retro warm, after the open Gruvbox palette (MIT, morhetz/gruvbox): cream
-// paper by day, brown-black by night, earthy roles. Its orange is left out.
+// paper by day, brown-black by night, earthy roles, its orange as the accent.
 export const GRUVBOX: Palette = {
   label: 'lofi puppy · gruvbox',
   light: {
@@ -54,7 +56,7 @@ export const GRUVBOX: Palette = {
     wall: '#1d2021', card: '#282828', surface2: '#32302f', surface3: '#3c3836',
     line: '#3c3836', edge: '#504945', text: '#ebdbb2', secondary: '#d5c4a1', muted: '#a89984',
   },
-  roles: { accent: '#458588', danger: '#cc241d', success: '#98971a', warning: '#d79921', pro: '#b16286' },
+  roles: { accent: '#d65d0e', danger: '#cc241d', success: '#98971a', warning: '#d79921', pro: '#b16286' },
 }
 
 export const PALETTES = { warm: WARM, gruvbox: GRUVBOX } as const

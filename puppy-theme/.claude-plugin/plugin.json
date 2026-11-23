@@ -19,7 +19,7 @@
     "palette": {
       "type": "string",
       "title": "Palette",
-      "description": "warm: the lofi puppy's warm greys (paper by day, charcoal by night). gruvbox: retro cream and brown-black, after the open gruvbox palette, without its orange. /puppy-look switches it for one session.",
+      "description": "warm: the lofi puppy's warm greys (paper by day, charcoal by night). gruvbox: retro cream and brown-black, after the open gruvbox palette. /puppy-look switches it for one session.",
       "default": "warm",
       "options": [
         "warm",
