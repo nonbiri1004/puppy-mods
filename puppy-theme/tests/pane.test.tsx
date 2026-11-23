@@ -98,6 +98,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const note = await ui.find({ type: 'Text', text: /desktop app|this computer/ })
     expect(note?.text).toMatch(surface === 'terminal' ? /desktop app/ : /this computer/)
 
+    await ui.press({ key: 'glass' })
+    expect(sets.at(-1)?.backdrop).toMatchObject({ glass: { blur: 0, opacity: 0.05 } })
     await ui.press({ key: 'wall-plain' })
     await ui.press({ key: 'messages-bookmark' })
     expect(sets.at(-1)?.style?.UserMessage).toMatchObject({ paddingY: 12 })
@@ -107,6 +109,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     expect(store.get('prefs')).toMatchObject({
       wall: 'plain',
+      glass: false,
       messages: 'app',
       sounds: 'rain',
       cues: { tool: false, send: true },
@@ -134,7 +137,7 @@ test('the look turns off to the app\'s own and back, and reset brings the defaul
   expect(store.get('prefs')).toMatchObject({ on: false, wall: 'plain', sounds: 'chip' })
 
   await ui.press({ key: 'reset' })
-  expect(store.get('prefs')).toMatchObject({ on: true, wall: 'sky', messages: 'pixel', sounds: 'lofi' })
+  expect(store.get('prefs')).toMatchObject({ on: true, wall: 'sky', glass: true, messages: 'pixel', sounds: 'lofi' })
   expect(sets.at(-1)?.backdrop).toMatchObject({ scene: SCENE_ID })
   await ui.unmount()
 })

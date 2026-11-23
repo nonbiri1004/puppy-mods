@@ -45,10 +45,19 @@ export const lookColors = (): { colors: ThemeColors; problems: string[] } => {
 export const unpainted = (problems: readonly string[]): string | undefined =>
   problems.find(line => line.startsWith("Desktop won't paint"))
 
+// How the panels sit over the night sky. Frosted: a light blur and a thin veil,
+// so the sky still shows and the words on top stay easy to read. Clear: almost
+// no veil, the sky at its brightest, but words that cross the frame are harder
+// to read. (The app's own 0.6 veil hides the sky under the panels.)
+export const GLASS = {
+  frosted: { blur: 8, opacity: 0.2 },
+  clear: { blur: 0, opacity: 0.05 },
+} as const
+
 /** The parts every build takes: colors and, if picked, the night sky. */
 export const baseLook = (prefs: Prefs): ThemeSetArgs => ({
   colors: lookColors().colors,
-  ...(prefs.wall === 'sky' ? { backdrop: { scene: SCENE_ID, glass: { blur: 20 } } } : {}),
+  ...(prefs.wall === 'sky' ? { backdrop: { scene: SCENE_ID, glass: prefs.glass ? GLASS.frosted : GLASS.clear } } : {}),
 })
 
 /** The sound with only the cues the person kept; the ambience stays (the app's speaker turns it off). */

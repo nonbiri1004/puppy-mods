@@ -16,6 +16,8 @@ export type Prefs = {
   // false: the app's own look, the picks below kept for later
   on: boolean
   wall: Wall
+  // frosted glass on the panels over the night sky; off lets the sky show through clear
+  glass: boolean
   // the message style; 'app' keeps the app's own rows
   messages: MessageStyle
   // which set of sounds plays

@@ -14,6 +14,7 @@ export const SOUND_SETS: readonly SoundSet[] = ['lofi', 'wood', 'rain', 'chip']
 export const DEFAULT_PREFS: Prefs = {
   on: true,
   wall: 'sky',
+  glass: true,
   messages: 'pixel',
   sounds: 'lofi',
   cues: { send: true, tool: true, compact: true, done: true, ask: true, error: true, click: true },
@@ -34,6 +35,7 @@ export const parsePrefs = (raw: unknown): Prefs => {
   return {
     on: typeof o.on === 'boolean' ? o.on : DEFAULT_PREFS.on,
     wall: isWall(o.wall) ? o.wall : DEFAULT_PREFS.wall,
+    glass: typeof o.glass === 'boolean' ? o.glass : DEFAULT_PREFS.glass,
     messages: isMessageStyle(o.messages)
       ? o.messages
       : o.style === false // an earlier build kept an on/off switch

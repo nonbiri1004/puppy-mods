@@ -120,6 +120,9 @@ export const register: Register = on => {
             <Text dimColor>{WALL_LABEL[prefs.wall]}</Text>
           </Box>
           {WALLS.map(w => choice(`wall-${w}`, prefs.wall === w, WALL_LABEL[w], () => pick($, p => ({ ...p, wall: w }))))}
+          {toggle('glass', prefs.glass, 'frosted glass', prefs.wall === 'sky' ? 'off: the sky shows clear' : 'for the night sky', () =>
+            pick($, p => ({ ...p, glass: !p.glass })),
+          )}
         </Box>
         <Box key="card-messages" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
           <Box flexDirection="row" justifyContent="space-between">

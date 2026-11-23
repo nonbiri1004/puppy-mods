@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { checkColors } from '../hooks/make-colors.js'
-import { lookColors, lookFor } from '../hooks/look'
+import { GLASS, lookColors, lookFor } from '../hooks/look'
 import { PALETTE } from '../hooks/palette'
 import { DEFAULT_PREFS, parsePrefs } from '../hooks/prefs'
 import { drawScene, SCENE_ID } from '../hooks/scene'
@@ -62,7 +62,8 @@ test('the scene is pure vector, slow and small enough', () => {
 
 test('the look follows each pick', () => {
   const full = lookFor(DEFAULT_PREFS)
-  expect(full.backdrop).toMatchObject({ scene: SCENE_ID })
+  expect(full.backdrop).toMatchObject({ scene: SCENE_ID, glass: GLASS.frosted })
+  expect(lookFor({ ...DEFAULT_PREFS, glass: false }).backdrop).toMatchObject({ glass: GLASS.clear })
   expect(full.style).toBeDefined()
   expect(Object.keys(full.sound?.cues ?? {})).toHaveLength(7)
 
@@ -89,6 +90,7 @@ test('what an earlier version stored is read field by field', () => {
   expect(old).not.toHaveProperty('palette')
   expect(old.wall).toBe('sky')
   expect(old.messages).toBe('pixel')
+  expect(old.glass).toBe(true)
   // the on/off switch an earlier build kept turns into a pick
   expect(parsePrefs({ style: false }).messages).toBe('app')
   expect(parsePrefs({ style: true }).messages).toBe('pixel')
