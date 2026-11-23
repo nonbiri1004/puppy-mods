@@ -1,3 +1,5 @@
+import type { PaletteName } from '../types'
+
 // The palettes this look can wear. The warm greys keep the brand's rule of no
 // orange (in baibai-brand, orange belongs to the puppy's headphones alone);
 // the gruvbox option keeps gruvbox's own colors, orange included (the person
@@ -59,6 +61,6 @@ export const GRUVBOX: Palette = {
   roles: { accent: '#d65d0e', danger: '#cc241d', success: '#98971a', warning: '#d79921', pro: '#b16286' },
 }
 
-export const PALETTES = { warm: WARM, gruvbox: GRUVBOX } as const
-export type PaletteName = keyof typeof PALETTES
-export const DEFAULT_PALETTE: PaletteName = 'warm'
+export type { PaletteName }
+
+export const PALETTES: Record<PaletteName, Palette> = { warm: WARM, gruvbox: GRUVBOX }

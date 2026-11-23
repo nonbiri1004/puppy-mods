@@ -1,7 +1,10 @@
-import type { ThemeColors, ThemeSetArgs } from 'claude-code'
+import type { ThemeColors, ThemeSetArgs, ThemeSound } from 'claude-code'
+
+import type { Prefs } from '../types'
 
 import { makeColors } from './make-colors.js'
 import { PALETTES, type Mode, type PaletteName } from './palette'
+import { CUES } from './prefs'
 import { sceneId } from './scene'
 import { SOUND } from './sound'
 import { STYLE, messageColors } from './style'
@@ -42,15 +45,21 @@ export const colorsFor = (name: PaletteName): { colors: ThemeColors; problems: s
 export const unpainted = (problems: readonly string[]): string | undefined =>
   problems.find(line => line.startsWith("Desktop won't paint"))
 
-/** The parts every build takes: colors and the backdrop. */
-export const baseLook = (name: PaletteName): ThemeSetArgs => ({
-  colors: colorsFor(name).colors,
-  backdrop: { scene: sceneId(name), glass: { blur: 20 } },
+/** The parts every build takes: colors and, if picked, the night sky. */
+export const baseLook = (prefs: Prefs): ThemeSetArgs => ({
+  colors: colorsFor(prefs.palette).colors,
+  ...(prefs.wall === 'sky' ? { backdrop: { scene: sceneId(prefs.palette), glass: { blur: 20 } } } : {}),
 })
 
-/** The whole look, with the message style and the sound. */
-export const fullLook = (name: PaletteName): ThemeSetArgs => ({
-  ...baseLook(name),
-  style: STYLE,
-  sound: SOUND,
+/** The sound with only the cues the person kept; the ambience stays (the app's speaker turns it off). */
+export const soundFor = (prefs: Prefs): ThemeSound => ({
+  ...SOUND,
+  cues: Object.fromEntries(CUES.filter(c => prefs.cues[c]).map(c => [c, SOUND.cues?.[c]])),
+})
+
+/** The whole look the person picked. */
+export const lookFor = (prefs: Prefs): ThemeSetArgs => ({
+  ...baseLook(prefs),
+  ...(prefs.style ? { style: STYLE } : {}),
+  sound: soundFor(prefs),
 })

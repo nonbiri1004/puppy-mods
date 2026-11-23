@@ -1,8 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
 import { checkColors } from '../hooks/make-colors.js'
-import { colorsFor, fullLook } from '../hooks/look'
+import { colorsFor, lookFor } from '../hooks/look'
 import { PALETTES, type PaletteName } from '../hooks/palette'
+import { DEFAULT_PREFS, parsePrefs } from '../hooks/prefs'
 import { sceneFor, sceneId } from '../hooks/scene'
 
 const NAMES = Object.keys(PALETTES) as PaletteName[]
@@ -38,47 +39,35 @@ test('the scenes are pure vector, slow and small enough', () => {
   }
 })
 
-test('session start sets the whole look once, warm grey first', async ($, on) => {
-  const sets: unknown[] = []
-  const logs: unknown[] = []
-  on('ui.log', (_, e) => {
-    logs.push(e)
-    return { value: undefined }
+test('the look follows each pick', () => {
+  const full = lookFor(DEFAULT_PREFS)
+  expect(full.backdrop).toMatchObject({ scene: sceneId('warm') })
+  expect(full.style).toBeDefined()
+  expect(Object.keys(full.sound?.cues ?? {})).toHaveLength(7)
+
+  const quiet = lookFor({
+    ...DEFAULT_PREFS,
+    palette: 'gruvbox',
+    wall: 'plain',
+    style: false,
+    cues: { ...DEFAULT_PREFS.cues, tool: false, click: false },
   })
-  on('theme.set', (_, e) => {
-    sets.push(e)
-    return { value: { isDrawn: true as const, requestId: 'test' } }
-  })
-  on('command.register', () => ({ value: { command: 'puppy-look' } }))
-  on('session.start', (_, e) => ({ cwd: e.cwd }))
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  expect(sets).toHaveLength(1)
-  expect(sets[0]).toMatchObject({ backdrop: { scene: sceneId('warm') } })
-  expect(sets[0]).toMatchObject({ style: fullLook('warm').style })
-  expect(logs).toEqual([])
+  expect(quiet.backdrop).toBeUndefined()
+  expect(quiet.style).toBeUndefined()
+  expect(Object.keys(quiet.sound?.cues ?? {}).sort()).toEqual(['ask', 'compact', 'done', 'error', 'send'])
+  expect(quiet.sound?.ambience).toBeDefined()
 })
 
-test('a build that refuses style or sound still gets colors and the backdrop', async ($, on) => {
-  const sets: Record<string, unknown>[] = []
-  const logs: unknown[] = []
-  on('ui.log', (_, e) => {
-    logs.push(e)
-    return { value: undefined }
-  })
-  on('theme.set', (_, e) => {
-    if ('sound' in e) {
-      throw new Error('sound is not taken here')
-    }
-    sets.push(e)
-    return { value: { isDrawn: true as const, requestId: 'test' } }
-  })
-  on('command.register', () => ({ value: { command: 'puppy-look' } }))
-  on('session.start', (_, e) => ({ cwd: e.cwd }))
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  expect(sets).toHaveLength(1)
-  expect(sets[0]).toHaveProperty('colors')
-  expect(sets[0]).not.toHaveProperty('style')
-  expect(JSON.stringify(logs)).toContain('colors only')
+test('what an earlier version stored is read field by field', () => {
+  expect(parsePrefs(undefined)).toEqual(DEFAULT_PREFS)
+  expect(parsePrefs('junk')).toEqual(DEFAULT_PREFS)
+  const old = parsePrefs({ palette: 'gruvbox', wall: 'app', cards: false, cues: { tool: false, beep: true } })
+  expect(old.palette).toBe('gruvbox')
+  expect(old.wall).toBe('sky')
+  expect(old.style).toBe(true)
+  expect(old.cues.tool).toBe(false)
+  expect(old.cues.send).toBe(true)
+  expect(old.cues).not.toHaveProperty('beep')
 })
 
 test('the backdrop draws our scenes on the desktop and leaves others alone', async ($, on) => {
@@ -94,16 +83,4 @@ test('the backdrop draws our scenes on the desktop and leaves others alone', asy
   const other = await $.ui.mount({ ...backdrop('pond'), surface: 'desktop' })
   expect((await other.find({ type: 'Text' }))?.text).toBe('engine')
   await other.unmount()
-})
-
-test('the palette setting picks the look a session starts in', { options: { palette: 'gruvbox' } }, async ($, on) => {
-  const sets: unknown[] = []
-  on('theme.set', (_, e) => {
-    sets.push(e)
-    return { value: { isDrawn: true as const, requestId: 'test' } }
-  })
-  on('command.register', () => ({ value: { command: 'puppy-look' } }))
-  on('session.start', (_, e) => ({ cwd: e.cwd }))
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  expect(sets[0]).toMatchObject({ backdrop: { scene: sceneId('gruvbox') } })
 })
