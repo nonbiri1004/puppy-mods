@@ -1,4 +1,6 @@
-import type { CueName, MessageStyle, Prefs, SoundSet, Wall } from '../types'
+import type { CueName, MessageStyle, PaletteName, Prefs, SoundSet, Wall } from '../types'
+
+import { PALETTE_NAMES } from './palette'
 
 // What the person picked in the /look pane. One source: the pane writes
 // it, $.store keeps it across sessions on this computer, and the look is made
@@ -13,6 +15,7 @@ export const SOUND_SETS: readonly SoundSet[] = ['lofi', 'wood', 'rain', 'chip']
 
 export const DEFAULT_PREFS: Prefs = {
   on: true,
+  colors: 'baibai',
   wall: 'sky',
   glass: true,
   messages: 'pixel',
@@ -23,6 +26,8 @@ export const DEFAULT_PREFS: Prefs = {
 const isSoundSet = (v: unknown): v is SoundSet => typeof v === 'string' && (SOUND_SETS as readonly string[]).includes(v)
 const isMessageStyle = (v: unknown): v is MessageStyle =>
   typeof v === 'string' && (MESSAGE_STYLES as readonly string[]).includes(v)
+const isPalette = (v: unknown): v is PaletteName =>
+  typeof v === 'string' && (PALETTE_NAMES as readonly string[]).includes(v)
 const isWall = (v: unknown): v is Wall => typeof v === 'string' && (WALLS as readonly string[]).includes(v)
 
 /**
@@ -34,6 +39,7 @@ export const parsePrefs = (raw: unknown): Prefs => {
   const cues = typeof o.cues === 'object' && o.cues !== null ? (o.cues as Record<string, unknown>) : {}
   return {
     on: typeof o.on === 'boolean' ? o.on : DEFAULT_PREFS.on,
+    colors: isPalette(o.colors) ? o.colors : DEFAULT_PREFS.colors,
     wall: isWall(o.wall) ? o.wall : DEFAULT_PREFS.wall,
     glass: typeof o.glass === 'boolean' ? o.glass : DEFAULT_PREFS.glass,
     messages: isMessageStyle(o.messages)

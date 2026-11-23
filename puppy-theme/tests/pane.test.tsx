@@ -92,12 +92,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const { store, sets } = engine(on, undefined)
     await $.session.start({ cwd: '/', surface, isInteractive: true })
     const ui = await $.ui.mount({ ...PANE, surface })
-    for (const card of ['card-reset', 'card-wall', 'card-messages', 'card-sounds']) {
+    for (const card of ['card-reset', 'card-colors', 'card-wall', 'card-messages', 'card-sounds']) {
       expect(await ui.find({ key: card })).toBeTruthy()
     }
     const note = await ui.find({ type: 'Text', text: /desktop app|this computer/ })
     expect(note?.text).toMatch(surface === 'terminal' ? /desktop app/ : /this computer/)
 
+    await ui.press({ key: 'colors-eyecare' })
     await ui.press({ key: 'glass' })
     expect(sets.at(-1)?.backdrop).toMatchObject({ glass: { blur: 0, opacity: 0.05 } })
     await ui.press({ key: 'wall-plain' })
@@ -108,6 +109,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.press({ key: 'sounds-rain' })
 
     expect(store.get('prefs')).toMatchObject({
+      colors: 'eyecare',
       wall: 'plain',
       glass: false,
       messages: 'app',
@@ -137,7 +139,7 @@ test('the look turns off to the app\'s own and back, and reset brings the defaul
   expect(store.get('prefs')).toMatchObject({ on: false, wall: 'plain', sounds: 'chip' })
 
   await ui.press({ key: 'reset' })
-  expect(store.get('prefs')).toMatchObject({ on: true, wall: 'sky', glass: true, messages: 'pixel', sounds: 'lofi' })
+  expect(store.get('prefs')).toMatchObject({ on: true, colors: 'baibai', wall: 'sky', glass: true, messages: 'pixel', sounds: 'lofi' })
   expect(sets.at(-1)?.backdrop).toMatchObject({ scene: SCENE_ID })
   await ui.unmount()
 })

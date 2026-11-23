@@ -1,32 +1,33 @@
 import type { ThemeColors, ThemeSetArgs, ThemeSound } from 'claude-code'
 
-import type { Prefs } from '../types'
+import type { PaletteName, Prefs } from '../types'
 
 import { makeColors } from './make-colors.js'
-import { PALETTE, type Mode } from './palette'
+import { paletteFor, ROLES, type Six } from './palette'
 import { CUES } from './prefs'
 import { SCENE_ID } from './scene'
 import { SOUNDS } from './sound'
 import { messageColors, styleFor } from './style'
 
-const anchors = (m: Mode) => ({
+// The brand gives six colors a mode; makeColors works out the rest (text-secondary,
+// the darker surfaces). Light mode's surface-2 is the card: left out, makeColors
+// gives pure white, and the brand has no third paper.
+const anchors = (m: Six, mode: 'light' | 'dark') => ({
   'surface-0': m.wall,
   'surface-1': m.card,
-  'surface-2': m.surface2,
-  ...(m.surface3 === undefined ? {} : { 'surface-3': m.surface3 }),
+  ...(mode === 'light' ? { 'surface-2': m.card } : {}),
   'text-primary': m.text,
-  'text-secondary': m.secondary,
   'text-muted': m.muted,
 })
 
-/** The design-system colors made from the palette, and their contrast notes. */
-export const lookColors = (): { colors: ThemeColors; problems: string[] } => {
-  const p = PALETTE
+/** The design-system colors made from a palette, and their contrast notes. */
+export const lookColors = (name: PaletteName): { colors: ThemeColors; problems: string[] } => {
+  const p = paletteFor(name)
   const { theme, problems } = makeColors({
-    label: p.label,
-    roles: p.roles,
-    light: { gray: { anchors: anchors(p.light) } },
-    dark: { gray: { anchors: anchors(p.dark) } },
+    label: name === 'eyecare' ? 'lofi puppy · eye care' : 'lofi puppy · baibai',
+    roles: ROLES,
+    light: { gray: { anchors: anchors(p.light, 'light') } },
+    dark: { gray: { anchors: anchors(p.dark, 'dark') } },
   })
   // The four message colors go in after makeColors, which doesn't take them.
   const extra = messageColors(p)
@@ -56,7 +57,7 @@ export const GLASS = {
 
 /** The parts every build takes: colors and, if picked, the night sky. */
 export const baseLook = (prefs: Prefs): ThemeSetArgs => ({
-  colors: lookColors().colors,
+  colors: lookColors(prefs.colors).colors,
   ...(prefs.wall === 'sky' ? { backdrop: { scene: SCENE_ID, glass: prefs.glass ? GLASS.frosted : GLASS.clear } } : {}),
 })
 

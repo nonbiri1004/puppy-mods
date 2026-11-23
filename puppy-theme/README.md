@@ -10,6 +10,11 @@ look                                         kept on this computer
 │ ↺ back to the puppy's defaults              │
 ╰─────────────────────────────────────────────╯
 ╭─────────────────────────────────────────────╮
+│ colors                              baibai  │
+│ ● baibai · the brand greys                  │
+│ ○ eye care · softer text                    │
+╰─────────────────────────────────────────────╯
+╭─────────────────────────────────────────────╮
 │ wall                       night sky frame  │
 │ ● night sky frame                           │
 │ ○ plain wall                                │
@@ -48,7 +53,7 @@ then open the desktop app's code tab: the look draws there.
 ## what you do
 
 - **open the settings**: `/look`. every pick is worn at once and kept on this computer, for every session.
-- **colors**: the lofi puppy's own warm greys, paper grey by day and warm charcoal by night. they follow light and dark mode, and there is nothing to pick.
+- **colors**: **baibai** is the lofi puppy's own warm greys, paper grey by day and warm charcoal by night, exactly as the brand gives them. **eye care** is worked out from those: softer text, and a warmer, slightly deeper wall by day. both follow light and dark mode.
 - **wall**: a small framed night sky in the top right corner, with slow twinkling pixel stars, or the plain wall color. **frosted glass** puts a light blur and a thin veil on the panels over the sky, so words stay easy to read; off lets the sky show through clear.
 - **messages**: how your messages are drawn: a small pixel card with a stepped tail, paper notes held by grey tape (two take turns, tilted a little), or a card with a slate blue bookmark strip. replies get a little more room between lines and tool rows are quiet code-font strips in all three. **the app's own rows** turns the message style off.
 - **look on or off**: off shows the app as it comes, and keeps your picks for when you turn it back on. **back to the puppy's defaults** resets every pick.

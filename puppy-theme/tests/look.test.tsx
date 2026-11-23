@@ -2,7 +2,8 @@ import { expect, test } from 'claude-code/testing'
 
 import { checkColors } from '../hooks/make-colors.js'
 import { GLASS, lookColors, lookFor } from '../hooks/look'
-import { PALETTE } from '../hooks/palette'
+import { makeColors } from '../hooks/make-colors.js'
+import { BRAND, contrast as ratio, deriveEyeCare, paletteFor, PALETTE_NAMES, ROLES } from '../hooks/palette'
 import { DEFAULT_PREFS, parsePrefs } from '../hooks/prefs'
 import { drawScene, SCENE_ID } from '../hooks/scene'
 import { BOOKMARK, STYLES, TAPE } from '../hooks/style'
@@ -23,26 +24,73 @@ const contrast = (a: number[], b: number[]) => {
 const backdrop = (scene: string) =>
   ({ plugin: 'puppy-theme', component: 'Backdrop', props: { plugin: 'puppy-theme', scene, glass: { blur: 20, opacity: 0.6 } } }) as const
 
-test('the colors use only names the app knows, and Desktop paints them', () => {
-  const { colors, problems } = lookColors()
-  expect(problems.filter(line => line.startsWith("Desktop won't paint"))).toEqual([])
-  // checkColors also lists the soft contrast lines; keep only the ones that
-  // would paint nothing or stop the theme
-  const hard = checkColors(colors).filter(line => !/ is [\d.]+:1 in (light|dark) mode/.test(line))
-  expect(hard).toEqual([])
-})
+for (const name of PALETTE_NAMES) {
+  test(`the ${name} colors use only names the app knows, and Desktop paints them`, () => {
+    const { colors, problems } = lookColors(name)
+    expect(problems.filter(line => line.startsWith("Desktop won't paint"))).toEqual([])
+    // checkColors also lists the soft contrast lines; keep only the ones that
+    // would paint nothing or stop the theme
+    const hard = checkColors(colors).filter(line => !/ is [\d.]+:1 in (light|dark) mode/.test(line))
+    expect(hard).toEqual([])
+  })
+}
 
-test('the warm greys carry no orange: in the brand it is the headphones alone', () => {
-  expect(JSON.stringify(PALETTE).toLowerCase()).not.toMatch(/#f08a3c|#d65d0e|#fe8019|#af3a03/)
-})
-
-test('each message style keeps its words at 3:1 on every color it draws, in both modes', () => {
-  for (const mode of [PALETTE.light, PALETTE.dark]) {
-    const words = rgb(mode.text)
-    expect(contrast(words, rgb(TAPE, mode.card))).toBeGreaterThanOrEqual(3)
-    expect(contrast(words, rgb(BOOKMARK))).toBeGreaterThanOrEqual(3)
-    expect(contrast(words, rgb(mode.edge))).toBeGreaterThanOrEqual(3)
+// Which gray stop each surface and text takes, as make-colors.js lays them out
+// (the anchors come back at these stops, which the test checks too).
+const surfaces = (name: (typeof PALETTE_NAMES)[number], mode: 'light' | 'dark') => {
+  const p = paletteFor(name)
+  const anchors = { 'surface-0': p[mode].wall, 'surface-1': p[mode].card, ...(mode === 'light' ? { 'surface-2': p[mode].card } : {}), 'text-primary': p[mode].text, 'text-muted': p[mode].muted }
+  const { theme } = makeColors({ label: name, roles: ROLES, [mode]: { gray: { anchors } } })
+  const g = (theme.inputs as Record<string, Record<string, string>>)[mode]!
+  const d = mode === 'dark'
+  const at = (k: string) => g[k]!
+  return {
+    s: [at(d ? 'gray-900' : 'gray-20'), at(d ? 'gray-850' : 'gray-10'), at(d ? 'gray-830' : 'gray-0'), at(d ? 'gray-800' : 'gray-0')],
+    text: d ? at('gray-50') : at('gray-900'),
+    muted: at('gray-400'),
+    wall: p[mode].wall,
   }
+}
+
+for (const name of PALETTE_NAMES) {
+  for (const mode of ['light', 'dark'] as const) {
+    test(`${name} ${mode}: text-primary is 7:1 on every surface and text-muted 4.5:1 on surface-0 and surface-2`, () => {
+      const t = surfaces(name, mode)
+      expect(t.s[0]).toBe(t.wall)
+      for (const s of t.s) expect(ratio(t.text, s)).toBeGreaterThanOrEqual(7)
+      expect(ratio(t.muted, t.s[0]!)).toBeGreaterThanOrEqual(4.5)
+      expect(ratio(t.muted, t.s[2]!)).toBeGreaterThanOrEqual(4.5)
+    })
+  }
+}
+
+test('baibai is the brand exactly, and eye care is worked out from it', () => {
+  expect(paletteFor('baibai')).toBe(BRAND)
+  const eye = deriveEyeCare(BRAND)
+  expect(eye.dark.wall).toBe(BRAND.dark.wall) // the charcoal stays
+  expect(eye.light.wall).not.toBe(BRAND.light.wall) // a warmer day wall
+  expect(ratio(eye.dark.text, eye.dark.wall)).toBeLessThan(ratio(BRAND.dark.text, BRAND.dark.wall))
+})
+
+test('the colors carry no orange: in the brand it is the headphones alone', () => {
+  const all = JSON.stringify([BRAND, deriveEyeCare(BRAND), ROLES]).toLowerCase()
+  expect(all).not.toMatch(/#f08a3c|#e07b35|#d65d0e|#fe8019|#af3a03/)
+})
+
+test('each message style keeps its words at 3:1 on every color it draws', () => {
+  for (const name of PALETTE_NAMES) {
+    for (const mode of [paletteFor(name).light, paletteFor(name).dark]) {
+      const words = rgb(mode.text)
+      expect(contrast(words, rgb(TAPE, mode.card))).toBeGreaterThanOrEqual(3)
+      expect(contrast(words, rgb(mode.edge))).toBeGreaterThanOrEqual(3)
+    }
+  }
+  // the bookmark strip is one slate blue for both modes: it holds 3:1 with the
+  // brand's words; eye care's softer dark text falls under, and then the app lays
+  // the message's backgroundColor (the card, same as the drawing's middle) under
+  // the words alone, so nothing shows. Check in the app.
+  for (const mode of [BRAND.light, BRAND.dark]) expect(contrast(rgb(mode.text), rgb(BOOKMARK))).toBeGreaterThanOrEqual(3)
+  expect(STYLES.bookmark.UserMessage).toMatchObject({ backgroundColor: 'bg-user-message' })
   // every raw color a drawing uses is one of the checked ones
   const raw = JSON.stringify(STYLES).match(/#[0-9a-f]{6,8}/gi) ?? []
   expect([...new Set(raw)].sort()).toEqual(['#00000024', BOOKMARK, TAPE].sort())

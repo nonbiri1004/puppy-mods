@@ -1,6 +1,9 @@
 // the seven moments the desktop app plays a theme's cue
 export type CueName = 'send' | 'tool' | 'compact' | 'done' | 'ask' | 'error' | 'click'
 
+// baibai: the brand's own warm greys; eyecare: worked out from them, softer text and a warmer day wall
+export type PaletteName = 'baibai' | 'eyecare'
+
 // sky: the framed night sky on the wall; plain: the wall color alone
 export type Wall = 'sky' | 'plain'
 
@@ -15,6 +18,7 @@ export type SoundSet = 'lofi' | 'wood' | 'rain' | 'chip'
 export type Prefs = {
   // false: the app's own look, the picks below kept for later
   on: boolean
+  colors: PaletteName
   wall: Wall
   // frosted glass on the panels over the night sky; off lets the sky show through clear
   glass: boolean

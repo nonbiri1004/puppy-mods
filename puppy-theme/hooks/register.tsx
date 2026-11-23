@@ -1,9 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { CueName, MessageStyle, Prefs, Wall } from '../types'
+import type { CueName, MessageStyle, PaletteName, Prefs, Wall } from '../types'
 import { baseLook, lookColors, lookFor, unpainted } from './look'
 import { CUES, DEFAULT_PREFS, MESSAGE_STYLES, parsePrefs, SOUND_SETS, STORE_KEY, WALLS } from './prefs'
+import { PALETTE_NAMES, paletteFor } from './palette'
 import { drawScene, SCENE_ID } from './scene'
 import { SOUND_LABEL } from './sound'
 
@@ -12,6 +13,7 @@ const PANE = 'look'
 // What the pane draws from: the session's copy of what $.store keeps.
 const prefsAtom = atom({ plugin: 'puppy-theme', key: 'prefs' } as const, DEFAULT_PREFS)
 
+const PALETTE_LABEL: Record<PaletteName, string> = { baibai: 'baibai · the brand greys', eyecare: 'eye care · softer text' }
 const WALL_LABEL: Record<Wall, string> = { sky: 'night sky frame', plain: 'plain wall' }
 const MESSAGE_LABEL: Record<MessageStyle, string> = {
   pixel: 'pixel card with a tail',
@@ -36,7 +38,7 @@ const wear = async ($: EngineInterface, prefs: Prefs): Promise<void> => {
     await $.theme.clear()
     return
   }
-  const problem = unpainted(lookColors().problems)
+  const problem = unpainted(lookColors(prefs.colors).problems)
   if (problem !== undefined) {
     $.ui.log(`puppy-theme: ${problem}`)
   }
@@ -114,6 +116,15 @@ export const register: Register = on => {
           )}
           <Button key="reset" label="↺ back to the puppy's defaults" plain dimColor onPress={() => pick($, () => DEFAULT_PREFS)} />
         </Box>
+        <Box key="card-colors" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
+          <Box flexDirection="row" justifyContent="space-between">
+            <Text weight="semibold">colors</Text>
+            <Text dimColor>{prefs.colors === 'eyecare' ? 'eye care' : 'baibai'}</Text>
+          </Box>
+          {PALETTE_NAMES.map(n =>
+            choice(`colors-${n}`, prefs.colors === n, PALETTE_LABEL[n], () => pick($, p => ({ ...p, colors: n }))),
+          )}
+        </Box>
         <Box key="card-wall" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
           <Box flexDirection="row" justifyContent="space-between">
             <Text weight="semibold">wall</Text>
@@ -154,11 +165,12 @@ export const register: Register = on => {
     )
   })
 
-  on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
+  on('ui.render', { component: 'Backdrop' }, async ($, e, next) => {
     if ((e.surface !== 'desktop' && e.surface !== 'mobile') || e.props.scene !== SCENE_ID) {
       return next(e)
     }
     const { Svg } = $.ui.resolve(e)
-    return <Svg source={drawScene()} alt="a small framed night sky on the wall" />
+    const prefs = parsePrefs(await read($, prefsAtom))
+    return <Svg source={drawScene(paletteFor(prefs.colors))} alt="a small framed night sky on the wall" />
   })
 }
