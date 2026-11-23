@@ -5,9 +5,9 @@ the lofi puppy's look for the claude desktop app: warm colors, a small framed ni
 ```
 look                                         kept on this computer
 ╭─────────────────────────────────────────────╮
-│ palette                          warm grey  │
-│ ● warm grey                                 │
-│ ○ gruvbox hard                              │
+│ look                                    on  │
+│ ☑  wear the puppy look                      │
+│ ↺ back to the puppy's defaults              │
 ╰─────────────────────────────────────────────╯
 ╭─────────────────────────────────────────────╮
 │ wall                       night sky frame  │
@@ -43,7 +43,7 @@ then open the desktop app's code tab: the look draws there.
 ## what you do
 
 - **open the settings**: `/look`. every pick is worn at once and kept on this computer, for every session.
-- **palette**: warm grey (the lofi puppy's own paper and charcoal greys) or gruvbox hard (retro cream and brown-black, the "hard" contrast of the open [gruvbox](https://github.com/morhetz/gruvbox) palette, its orange included). both follow light and dark mode.
+- **colors**: the lofi puppy's own warm greys, paper grey by day and warm charcoal by night. they follow light and dark mode, and there is nothing to pick.
 - **wall**: a small framed night sky in the top right corner, with slow twinkling pixel stars, or the plain wall color.
 - **messages**: your messages as small pixel cards, a little more room between lines, quiet code-font tool rows. off keeps the app's own rows.
 - **look on or off**: off shows the app as it comes, and keeps your picks for when you turn it back on. **back to the puppy's defaults** resets every pick.

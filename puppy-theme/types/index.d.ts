@@ -1,10 +1,7 @@
-// the palettes in hooks/palette.ts
-export type PaletteName = 'warm' | 'gruvbox'
-
 // the seven moments the desktop app plays a theme's cue
 export type CueName = 'send' | 'tool' | 'compact' | 'done' | 'ask' | 'error' | 'click'
 
-// sky: the framed night sky on the wall; plain: the palette's wall color alone
+// sky: the framed night sky on the wall; plain: the wall color alone
 export type Wall = 'sky' | 'plain'
 
 // lofi: hum, vinyl, a far-off key; wood: a fan and a marimba; rain: rain and slow piano; chip: 8-bit
@@ -14,7 +11,6 @@ export type SoundSet = 'lofi' | 'wood' | 'rain' | 'chip'
 export type Prefs = {
   // false: the app's own look, the picks below kept for later
   on: boolean
-  palette: PaletteName
   wall: Wall
   // the message style (pixel cards, airier text, quiet tool rows); off keeps the app's own rows
   style: boolean

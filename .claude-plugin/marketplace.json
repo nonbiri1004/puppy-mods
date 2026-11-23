@@ -26,7 +26,7 @@
     {
       "name": "puppy-theme",
       "source": "./puppy-theme",
-      "description": "the puppy's look for the desktop app: warm grey or gruvbox colors, a framed night sky, pixel message cards and soft sounds"
+      "description": "the puppy's look for the desktop app: warm grey colors, a framed night sky, pixel message cards and soft sounds"
     }
   ]
 }

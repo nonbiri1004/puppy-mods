@@ -9,12 +9,12 @@ import type { Palette } from './palette'
 // plain on the page, a little airier. Tool rows are quiet code-font strips.
 
 // The message colors per mode: named in the style, so it follows light and dark.
-// Claude's replies take the palette's text color too (checked 2026-11-23 with
-// a red test color: it draws with the message style on or off). Thin reply
-// text still looks a little greyer than an editor's heavier code font.
+// Only the person's messages take them: Claude's replies already draw in
+// text-primary, and a bg-assistant-message turns each reply into a padded
+// bubble, out of line with the tool rows.
 export const messageColors = (p: Palette): Record<'light' | 'dark', ThemeColorInputs> => ({
-  light: { 'bg-user-message': p.light.card, 'text-user-message': p.light.text, 'text-assistant-message': p.light.text, 'bg-assistant-message': p.light.wall },
-  dark: { 'bg-user-message': p.dark.card, 'text-user-message': p.dark.text, 'text-assistant-message': p.dark.text, 'bg-assistant-message': p.dark.wall },
+  light: { 'bg-user-message': p.light.card, 'text-user-message': p.light.text },
+  dark: { 'bg-user-message': p.dark.card, 'text-user-message': p.dark.text },
 })
 
 // A 24-unit box, a unit a point: the outline, then the card inside it.

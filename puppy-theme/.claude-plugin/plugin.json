@@ -1,7 +1,7 @@
 {
   "name": "puppy-theme",
   "version": "0.1.0",
-  "description": "the lofi puppy's look for the desktop app: warm greys or gruvbox colors, a small framed night sky on the wall, pixel message cards and soft sounds. /look picks each part",
+  "description": "the lofi puppy's look for the desktop app: warm grey colors, a small framed night sky on the wall, pixel message cards and soft sounds. /look picks each part",
   "types": "./types/index.d.ts",
   "author": {
     "name": "lofi puppy",

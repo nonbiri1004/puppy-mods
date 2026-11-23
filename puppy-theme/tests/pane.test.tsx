@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 import type { ThemeSetArgs } from 'claude-code'
 
-import { sceneId } from '../hooks/scene'
+import { SCENE_ID } from '../hooks/scene'
 
 const PANE = {
   plugin: 'puppy-theme',
@@ -48,7 +48,7 @@ const engine = (on: Parameters<TestBody>[1], stored: unknown) => {
 }
 
 test('a session starts in what the pane kept', async ($, on) => {
-  const { sets, logs } = engine(on, { palette: 'gruvbox', wall: 'plain', style: true, cues: { tool: false } })
+  const { sets, logs } = engine(on, { wall: 'plain', style: true, cues: { tool: false } })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   expect(sets).toHaveLength(1)
   expect(sets[0]?.backdrop).toBeUndefined()
@@ -59,7 +59,7 @@ test('a session starts in what the pane kept', async ($, on) => {
 test('with nothing kept, a session starts warm with the night sky', async ($, on) => {
   const { sets } = engine(on, undefined)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  expect(sets[0]?.backdrop).toMatchObject({ scene: sceneId('warm') })
+  expect(sets[0]?.backdrop).toMatchObject({ scene: SCENE_ID })
 })
 
 test('a build that refuses style or sound still gets colors and the backdrop', async ($, on) => {
@@ -87,24 +87,22 @@ test('a build that refuses style or sound still gets colors and the backdrop', a
 })
 
 for (const surface of ['terminal', 'desktop'] as const) {
-  test(`the pane has its four cards and each press is kept and worn (${surface})`, async ($, on) => {
+  test(`the pane has its cards and each press is kept and worn (${surface})`, async ($, on) => {
     const { store, sets } = engine(on, undefined)
     await $.session.start({ cwd: '/', surface, isInteractive: true })
     const ui = await $.ui.mount({ ...PANE, surface })
-    for (const card of ['card-palette', 'card-wall', 'card-messages', 'card-sounds']) {
+    for (const card of ['card-reset', 'card-wall', 'card-messages', 'card-sounds']) {
       expect(await ui.find({ key: card })).toBeTruthy()
     }
     const note = await ui.find({ type: 'Text', text: /desktop app|this computer/ })
     expect(note?.text).toMatch(surface === 'terminal' ? /desktop app/ : /this computer/)
 
-    await ui.press({ key: 'palette-gruvbox' })
     await ui.press({ key: 'wall-plain' })
     await ui.press({ key: 'style' })
     await ui.press({ key: 'cue-tool' })
     await ui.press({ key: 'sounds-rain' })
 
     expect(store.get('prefs')).toMatchObject({
-      palette: 'gruvbox',
       wall: 'plain',
       style: false,
       sounds: 'rain',
@@ -121,7 +119,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 }
 
 test('the look turns off to the app\'s own and back, and reset brings the defaults', async ($, on) => {
-  const { store, sets, clears } = engine(on, { palette: 'gruvbox', wall: 'plain', style: false, sounds: 'chip' })
+  const { store, sets, clears } = engine(on, { wall: 'plain', style: false, sounds: 'chip' })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ key: 'card-reset' })).toBeTruthy()
@@ -130,11 +128,11 @@ test('the look turns off to the app\'s own and back, and reset brings the defaul
   await ui.press({ key: 'on' })
   expect(clears()).toBe(1)
   expect(sets.length).toBe(before)
-  expect(store.get('prefs')).toMatchObject({ on: false, palette: 'gruvbox', sounds: 'chip' })
+  expect(store.get('prefs')).toMatchObject({ on: false, wall: 'plain', sounds: 'chip' })
 
   await ui.press({ key: 'reset' })
-  expect(store.get('prefs')).toMatchObject({ on: true, palette: 'warm', wall: 'sky', style: true, sounds: 'lofi' })
-  expect(sets.at(-1)?.backdrop).toMatchObject({ scene: sceneId('warm') })
+  expect(store.get('prefs')).toMatchObject({ on: true, wall: 'sky', style: true, sounds: 'lofi' })
+  expect(sets.at(-1)?.backdrop).toMatchObject({ scene: SCENE_ID })
   await ui.unmount()
 })
 

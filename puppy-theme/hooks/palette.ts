@@ -1,9 +1,4 @@
-import type { PaletteName } from '../types'
-
-// The palettes this look can wear. The warm greys keep the brand's rule of no
-// orange (in baibai-brand, orange belongs to the puppy's headphones alone);
-// the gruvbox option keeps gruvbox's own colors, orange included (the person
-// chose this on 2026-11-23: picking gruvbox steps outside the brand anyway).
+// The look's colors: one palette, in a light and a dark mode.
 
 export type Hex = `#${string}`
 
@@ -31,9 +26,10 @@ export type Palette = {
 }
 
 // The lofi puppy's warm greys (baibai-brand docs, "網站：白白的宇宙"): paper
-// grey by day, warm charcoal by night. The accent is the framed night sky's
+// grey by day, warm charcoal by night. No orange: in baibai-brand it belongs
+// to the puppy's headphones alone. The accent is the framed night sky's
 // grey-blue nebula, tuned up.
-export const WARM: Palette = {
+export const PALETTE: Palette = {
   label: 'lofi puppy · warm grey',
   light: {
     wall: '#eeede9', card: '#f8f7f4', surface2: '#fcfbf9',
@@ -45,26 +41,3 @@ export const WARM: Palette = {
   },
   roles: { accent: '#5a6e86', danger: '#b4483c', success: '#5b7f4a', warning: '#a87a1e', pro: '#7a6290' },
 }
-
-// The editor theme Gruvbox Hard (jdinhlife/vscode-theme-gruvbox, MIT, after
-// morhetz/gruvbox): its Light Hard colors by day and Dark Hard by night, taken
-// from the theme files themselves (the person asked for that, 2026-11-23).
-// Like the editor theme, every surface is the one bg0_h color and thin bg1
-// lines do the separating. Gruvbox's orange is the accent.
-export const GRUVBOX: Palette = {
-  label: 'lofi puppy · gruvbox hard',
-  light: {
-    // editor/sideBar/panel .background, sideBar.border, foreground, sideBar.foreground, tab.inactiveForeground
-    wall: '#f9f5d7', card: '#f9f5d7', surface2: '#f9f5d7',
-    line: '#ebdbb2', edge: '#d5c4a1', text: '#3c3836', secondary: '#504945', muted: '#7c6f64',
-  },
-  dark: {
-    wall: '#1d2021', card: '#1d2021', surface2: '#1d2021',
-    line: '#3c3836', edge: '#504945', text: '#ebdbb2', secondary: '#d5c4a1', muted: '#a89984',
-  },
-  roles: { accent: '#d65d0e', danger: '#cc241d', success: '#98971a', warning: '#d79921', pro: '#b16286' },
-}
-
-export type { PaletteName }
-
-export const PALETTES: Record<PaletteName, Palette> = { warm: WARM, gruvbox: GRUVBOX }

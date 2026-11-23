@@ -3,9 +3,9 @@ import type { ThemeColors, ThemeSetArgs, ThemeSound } from 'claude-code'
 import type { Prefs } from '../types'
 
 import { makeColors } from './make-colors.js'
-import { PALETTES, type Mode, type PaletteName } from './palette'
+import { PALETTE, type Mode } from './palette'
 import { CUES } from './prefs'
-import { sceneId } from './scene'
+import { SCENE_ID } from './scene'
 import { SOUNDS } from './sound'
 import { STYLE, messageColors } from './style'
 
@@ -19,9 +19,9 @@ const anchors = (m: Mode) => ({
   'text-muted': m.muted,
 })
 
-/** The design-system colors for a palette, and its contrast notes. */
-export const colorsFor = (name: PaletteName): { colors: ThemeColors; problems: string[] } => {
-  const p = PALETTES[name]
+/** The design-system colors made from the palette, and their contrast notes. */
+export const lookColors = (): { colors: ThemeColors; problems: string[] } => {
+  const p = PALETTE
   const { theme, problems } = makeColors({
     label: p.label,
     roles: p.roles,
@@ -47,8 +47,8 @@ export const unpainted = (problems: readonly string[]): string | undefined =>
 
 /** The parts every build takes: colors and, if picked, the night sky. */
 export const baseLook = (prefs: Prefs): ThemeSetArgs => ({
-  colors: colorsFor(prefs.palette).colors,
-  ...(prefs.wall === 'sky' ? { backdrop: { scene: sceneId(prefs.palette), glass: { blur: 20 } } } : {}),
+  colors: lookColors().colors,
+  ...(prefs.wall === 'sky' ? { backdrop: { scene: SCENE_ID, glass: { blur: 20 } } } : {}),
 })
 
 /** The sound with only the cues the person kept; the ambience stays (the app's speaker turns it off). */

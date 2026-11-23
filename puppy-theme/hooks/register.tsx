@@ -2,10 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { CueName, Prefs, Wall } from '../types'
-import { baseLook, colorsFor, lookFor, unpainted } from './look'
-import { PALETTES, type PaletteName } from './palette'
+import { baseLook, lookColors, lookFor, unpainted } from './look'
 import { CUES, DEFAULT_PREFS, parsePrefs, SOUND_SETS, STORE_KEY, WALLS } from './prefs'
-import { paletteOfScene, sceneFor } from './scene'
+import { drawScene, SCENE_ID } from './scene'
 import { SOUND_LABEL } from './sound'
 
 const PANE = 'look'
@@ -23,7 +22,6 @@ const CUE_LABEL: Record<CueName, string> = {
   error: 'a turn breaks',
   click: 'you click the wall',
 }
-const shortName = (name: PaletteName): string => PALETTES[name].label.replace('lofi puppy · ', '')
 
 // Sets the whole look (or, turned off, takes it away); a build that refuses style or sound gets colors and
 // the backdrop alone.
@@ -32,7 +30,7 @@ const wear = async ($: EngineInterface, prefs: Prefs): Promise<void> => {
     await $.theme.clear()
     return
   }
-  const problem = unpainted(colorsFor(prefs.palette).problems)
+  const problem = unpainted(lookColors().problems)
   if (problem !== undefined) {
     $.ui.log(`puppy-theme: ${problem}`)
   }
@@ -58,7 +56,7 @@ const pick = async ($: EngineInterface, change: (p: Prefs) => Prefs): Promise<vo
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'look', description: "pick the puppy's palette, wall, message style and sounds" })
+    await $.command.register({ name: 'look', description: "pick the puppy's wall, message style and sounds" })
     const prefs = parsePrefs(await $.store.get(STORE_KEY))
     await update($, prefsAtom, () => prefs)
     await wear($, prefs)
@@ -110,15 +108,6 @@ export const register: Register = on => {
           )}
           <Button key="reset" label="↺ back to the puppy's defaults" plain dimColor onPress={() => pick($, () => DEFAULT_PREFS)} />
         </Box>
-        <Box key="card-palette" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
-          <Box flexDirection="row" justifyContent="space-between">
-            <Text weight="semibold">palette</Text>
-            <Text dimColor>{shortName(prefs.palette)}</Text>
-          </Box>
-          {(Object.keys(PALETTES) as PaletteName[]).map(name =>
-            choice(`palette-${name}`, prefs.palette === name, shortName(name), () => pick($, p => ({ ...p, palette: name }))),
-          )}
-        </Box>
         <Box key="card-wall" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
           <Box flexDirection="row" justifyContent="space-between">
             <Text weight="semibold">wall</Text>
@@ -156,11 +145,10 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
-    const name = paletteOfScene(e.props.scene)
-    if ((e.surface !== 'desktop' && e.surface !== 'mobile') || name === undefined) {
+    if ((e.surface !== 'desktop' && e.surface !== 'mobile') || e.props.scene !== SCENE_ID) {
       return next(e)
     }
     const { Svg } = $.ui.resolve(e)
-    return <Svg source={sceneFor(name)} alt="a small framed night sky on the wall" />
+    return <Svg source={drawScene()} alt="a small framed night sky on the wall" />
   })
 }

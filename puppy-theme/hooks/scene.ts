@@ -4,13 +4,10 @@
 // "夜空小螢幕" night #151412 → #23211e, nebula #443c35 / #313840, warm white
 // stars). Pixel art, crisp edges, slow twinkles, nothing flashes.
 
-import { PALETTES, type PaletteName } from './palette'
+import { PALETTE } from './palette'
 
-export const sceneId = (name: PaletteName): string => `framed-night-${name}`
-
-/** The palette a scene id names, if it is one of ours. */
-export const paletteOfScene = (id: unknown): PaletteName | undefined =>
-  (Object.keys(PALETTES) as PaletteName[]).find(name => sceneId(name) === id)
+/** The name the backdrop asks for, and the Backdrop hook answers to. */
+export const SCENE_ID = 'framed-night'
 
 // Frame placement inside the 1200×800 view, anchored top right.
 const F = { x: 948, y: 56, w: 200, h: 130 }
@@ -81,8 +78,8 @@ const sky = (): string => {
   ].join('')
 }
 
-export const sceneFor = (name: PaletteName): string => {
-  const { light: l, dark: d } = PALETTES[name]
+export const drawScene = (): string => {
+  const { light: l, dark: d } = PALETTE
   return [
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMaxYMin meet" shape-rendering="crispEdges">`,
   `<defs><linearGradient id="night" x1="0" y1="0" x2="0" y2="1">`,

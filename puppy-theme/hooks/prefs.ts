@@ -1,5 +1,3 @@
-import type { PaletteName } from './palette'
-import { PALETTES } from './palette'
 import type { CueName, Prefs, SoundSet, Wall } from '../types'
 
 // What the person picked in the /look pane. One source: the pane writes
@@ -14,14 +12,12 @@ export const SOUND_SETS: readonly SoundSet[] = ['lofi', 'wood', 'rain', 'chip']
 
 export const DEFAULT_PREFS: Prefs = {
   on: true,
-  palette: 'warm',
   wall: 'sky',
   style: true,
   sounds: 'lofi',
   cues: { send: true, tool: true, compact: true, done: true, ask: true, error: true, click: true },
 }
 
-const isPalette = (v: unknown): v is PaletteName => typeof v === 'string' && v in PALETTES
 const isSoundSet = (v: unknown): v is SoundSet => typeof v === 'string' && (SOUND_SETS as readonly string[]).includes(v)
 const isWall = (v: unknown): v is Wall => typeof v === 'string' && (WALLS as readonly string[]).includes(v)
 
@@ -34,7 +30,6 @@ export const parsePrefs = (raw: unknown): Prefs => {
   const cues = typeof o.cues === 'object' && o.cues !== null ? (o.cues as Record<string, unknown>) : {}
   return {
     on: typeof o.on === 'boolean' ? o.on : DEFAULT_PREFS.on,
-    palette: isPalette(o.palette) ? o.palette : DEFAULT_PREFS.palette,
     wall: isWall(o.wall) ? o.wall : DEFAULT_PREFS.wall,
     style: typeof o.style === 'boolean' ? o.style : DEFAULT_PREFS.style,
     sounds: isSoundSet(o.sounds) ? o.sounds : DEFAULT_PREFS.sounds,
