@@ -48,9 +48,24 @@ const surfaces = (name: (typeof PALETTE_NAMES)[number], mode: 'light' | 'dark') 
     s: [at(d ? 'gray-900' : 'gray-20'), at(d ? 'gray-850' : 'gray-10'), at(d ? 'gray-830' : 'gray-0'), at(d ? 'gray-800' : 'gray-0')],
     text: d ? at('gray-50') : at('gray-900'),
     muted: at('gray-400'),
+    secondary: at(d ? 'gray-200' : 'gray-600'),
     wall: p[mode].wall,
   }
 }
+
+test('tool rows sit in a pixel frame, their words 3:1 on its line in every palette and mode', () => {
+  for (const s of Object.values(STYLES)) {
+    expect(s.ToolUse).toMatchObject({ color: 'text-secondary', fill: { vector: { viewBox: 12, slice: 4 } } })
+  }
+  for (const name of PALETTE_NAMES) {
+    for (const mode of ['light', 'dark'] as const) {
+      const p = paletteFor(name)[mode]
+      const t = surfaces(name, mode)
+      expect(ratio(t.secondary, p.line)).toBeGreaterThanOrEqual(3)
+      expect(ratio(t.secondary, t.s[1]!)).toBeGreaterThanOrEqual(4.5)
+    }
+  }
+})
 
 for (const name of PALETTE_NAMES) {
   for (const mode of ['light', 'dark'] as const) {
