@@ -4,8 +4,8 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { CueName, MessageStyle, PaletteName, Prefs, Wall } from '../types'
 import { baseLook, lookColors, lookFor, unpainted } from './look'
 import { CUES, DEFAULT_PREFS, MESSAGE_STYLES, parsePrefs, SOUND_SETS, STORE_KEY, WALLS } from './prefs'
-import { PALETTE_NAMES, paletteFor } from './palette'
-import { drawScene, SCENE_ID } from './scene'
+import { PALETTE_NAMES } from './palette'
+import { drawScene, periodOf, readSceneName } from './scene'
 import { SOUND_LABEL } from './sound'
 
 const PANE = 'look'
@@ -33,6 +33,9 @@ const CUE_LABEL: Record<CueName, string> = {
 
 // Sets the whole look (or, turned off, takes it away); a build that refuses style or sound gets colors and
 // the backdrop alone.
+// The local hour, for the sky's time of day.
+const hourNow = async ($: EngineInterface): Promise<number> => new Date(await $.clock.now()).getHours()
+
 const wear = async ($: EngineInterface, prefs: Prefs): Promise<void> => {
   if (!prefs.on) {
     await $.theme.clear()
@@ -42,12 +45,13 @@ const wear = async ($: EngineInterface, prefs: Prefs): Promise<void> => {
   if (problem !== undefined) {
     $.ui.log(`puppy-theme: ${problem}`)
   }
+  const hour = await hourNow($)
   let set
   try {
-    set = await $.theme.set(lookFor(prefs))
+    set = await $.theme.set(lookFor(prefs, hour))
   } catch (error) {
     $.ui.log(`puppy-theme: style or sound refused, colors only (${String(error)})`)
-    set = await $.theme.set(baseLook(prefs))
+    set = await $.theme.set(baseLook(prefs, hour))
   }
   if (!set.isDrawn) {
     $.ui.log(`puppy-theme: not drawn (${set.reason})`)
@@ -62,12 +66,28 @@ const pick = async ($: EngineInterface, change: (p: Prefs) => Prefs): Promise<vo
   await wear($, now)
 }
 
+// The time-of-day check; a reload starts a new one.
+let sky: { cancel: () => void } | undefined
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'look', description: "pick the puppy's wall, message style and sounds" })
     const prefs = parsePrefs(await $.store.get(STORE_KEY))
     await update($, prefsAtom, () => prefs)
     await wear($, prefs)
+    // The sky follows the time of day: look once a minute, and wear the look
+    // again only when the hour crosses into dawn, day, dusk or night.
+    sky?.cancel()
+    let period = periodOf(await hourNow($))
+    sky = $.clock.every(60_000, () => {
+      void (async () => {
+        const now = periodOf(await hourNow($))
+        if (now === period) return
+        period = now
+        const kept = parsePrefs(await read($, prefsAtom))
+        if (kept.on && kept.wall === 'sky') await wear($, kept)
+      })()
+    })
     return next(e)
   })
 
@@ -165,12 +185,13 @@ export const register: Register = on => {
     )
   })
 
-  on('ui.render', { component: 'Backdrop' }, async ($, e, next) => {
-    if ((e.surface !== 'desktop' && e.surface !== 'mobile') || e.props.scene !== SCENE_ID) {
+  on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
+    const scene = readSceneName(String(e.props.scene ?? ''))
+    if ((e.surface !== 'desktop' && e.surface !== 'mobile') || scene === undefined) {
       return next(e)
     }
     const { Svg } = $.ui.resolve(e)
-    const prefs = parsePrefs(await read($, prefsAtom))
-    return <Svg source={drawScene(paletteFor(prefs.colors))} alt="a small framed night sky on the wall" />
+    const alt = scene.weather === 'rain' ? 'a small framed window of rain on the wall' : `a small framed ${scene.period} sky on the wall`
+    return <Svg source={drawScene(scene.palette, scene.period, scene.weather)} alt={alt} />
   })
 }

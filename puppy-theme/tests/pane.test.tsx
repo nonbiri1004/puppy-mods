@@ -2,7 +2,6 @@ import { expect, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 import type { ThemeSetArgs } from 'claude-code'
 
-import { SCENE_ID } from '../hooks/scene'
 
 const PANE = {
   plugin: 'puppy-theme',
@@ -41,6 +40,8 @@ const engine = (on: Parameters<TestBody>[1], stored: unknown) => {
     clears += 1
     return { value: { isDrawn: true as const, requestId: 'test' } }
   })
+  on('clock.now', () => ({ value: new Date(2026, 10, 24, 12, 0).getTime() }))
+  on('clock.every', () => ({ deny: 'no timers in tests' }))
   on('command.register', () => ({ value: { command: 'look' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -60,7 +61,7 @@ test('a session starts in what the pane kept', async ($, on) => {
 test('with nothing kept, a session starts warm with the night sky', async ($, on) => {
   const { sets } = engine(on, undefined)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  expect(sets[0]?.backdrop).toMatchObject({ scene: SCENE_ID })
+  expect(sets[0]?.backdrop).toMatchObject({ scene: 'puppy-sky-baibai-day-clear' })
 })
 
 test('a build that refuses style or sound still gets colors and the backdrop', async ($, on) => {
@@ -78,6 +79,8 @@ test('a build that refuses style or sound still gets colors and the backdrop', a
     sets.push(e)
     return { value: { isDrawn: true as const, requestId: 'test' } }
   })
+  on('clock.now', () => ({ value: new Date(2026, 10, 24, 12, 0).getTime() }))
+  on('clock.every', () => ({ deny: 'no timers in tests' }))
   on('command.register', () => ({ value: { command: 'look' } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
@@ -140,7 +143,7 @@ test('the look turns off to the app\'s own and back, and reset brings the defaul
 
   await ui.press({ key: 'reset' })
   expect(store.get('prefs')).toMatchObject({ on: true, colors: 'baibai', wall: 'sky', glass: true, messages: 'pixel', sounds: 'lofi' })
-  expect(sets.at(-1)?.backdrop).toMatchObject({ scene: SCENE_ID })
+  expect(sets.at(-1)?.backdrop).toMatchObject({ scene: 'puppy-sky-baibai-day-clear' })
   await ui.unmount()
 })
 

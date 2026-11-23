@@ -5,7 +5,7 @@ import type { PaletteName, Prefs } from '../types'
 import { makeColors } from './make-colors.js'
 import { paletteFor, ROLES, type Six } from './palette'
 import { CUES } from './prefs'
-import { SCENE_ID } from './scene'
+import { periodOf, sceneName } from './scene'
 import { SOUNDS } from './sound'
 import { messageColors, styleFor } from './style'
 
@@ -55,10 +55,13 @@ export const GLASS = {
   clear: { blur: 0, opacity: 0.05 },
 } as const
 
-/** The parts every build takes: colors and, if picked, the night sky. */
-export const baseLook = (prefs: Prefs): ThemeSetArgs => ({
+/**
+ * The parts every build takes: colors and, if picked, the framed sky for this
+ * local hour (and rain when the rain sounds are picked).
+ */
+export const baseLook = (prefs: Prefs, hour = 22): ThemeSetArgs => ({
   colors: lookColors(prefs.colors).colors,
-  ...(prefs.wall === 'sky' ? { backdrop: { scene: SCENE_ID, glass: prefs.glass ? GLASS.frosted : GLASS.clear } } : {}),
+  ...(prefs.wall === 'sky' ? { backdrop: { scene: sceneName(prefs.colors, periodOf(hour), prefs.sounds === 'rain' ? 'rain' : 'clear'), glass: prefs.glass ? GLASS.frosted : GLASS.clear } } : {}),
 })
 
 /** The sound with only the cues the person kept; the ambience stays (the app's speaker turns it off). */
@@ -68,8 +71,8 @@ export const soundFor = (prefs: Prefs): ThemeSound => {
 }
 
 /** The whole look the person picked. */
-export const lookFor = (prefs: Prefs): ThemeSetArgs => ({
-  ...baseLook(prefs),
+export const lookFor = (prefs: Prefs, hour = 22): ThemeSetArgs => ({
+  ...baseLook(prefs, hour),
   ...(prefs.messages === 'app' ? {} : { style: styleFor(prefs.messages) }),
   sound: soundFor(prefs),
 })

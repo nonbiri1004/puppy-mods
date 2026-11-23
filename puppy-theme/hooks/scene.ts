@@ -1,106 +1,227 @@
 // The backdrop: a plain warm-grey wall (paper by day, charcoal by night) with
-// one small framed night sky hung in the top right corner, like the radio
-// screen on lofipuppy.app. The sky is the same in both modes (baibai-brand:
-// "夜空小螢幕" night #151412 → #23211e, nebula #443c35 / #313840, warm white
-// stars). Pixel art, crisp edges, slow twinkles, nothing flashes.
+// one small framed sky hung beside the sidebar, like the radio screen on
+// lofipuppy.app. Pixel art, crisp edges, slow motion, nothing flashes.
+//
+// Where: the root svg has no viewBox, so a unit is a CSS pixel and the frame
+// keeps its place beside the sidebar (199 px) at any window size. It hangs in
+// the strip between the sidebar and the text column, which stays clear with the
+// right pane open or shut:
+//   scene under 1364 px wide (or 320 tall): the wall alone, there is no room
+//   1364 to 1619: a slim upright frame, 24×96, at x 206
+//   1620 and up: the wide frame, 120×80, at x 215
+// (A folded sidebar with the pane open moves the text over the slim frame;
+// the API doesn't tell a backdrop that, so plain wall is the way out.)
+//
+// What: the sky follows the real time of day (dawn, day, dusk, night), with a
+// shooting star now and then at night; with the rain sounds picked, it rains.
 
-import { BRAND, type Palette } from './palette'
+import type { PaletteName } from '../types'
 
-/** The name the backdrop asks for, and the Backdrop hook answers to. */
-export const SCENE_ID = 'framed-night'
+import { paletteFor } from './palette'
 
-// Frame placement inside the 1200×800 view, anchored top right.
-const F = { x: 948, y: 56, w: 200, h: 130 }
+export type Period = 'dawn' | 'day' | 'dusk' | 'night'
+export type Weather = 'clear' | 'rain'
 
-// Stars: [x, y, size, delay seconds]. Size 1 is one pixel, 2 is a small cross.
-const STARS: readonly (readonly [number, number, 1 | 2, number])[] = [
-  [18, 14, 2, 0],
-  [46, 30, 1, 2.1],
-  [71, 12, 1, 4.3],
-  [96, 40, 2, 1.2],
-  [124, 18, 1, 3.4],
-  [150, 34, 1, 5.6],
-  [168, 12, 2, 2.7],
-  [30, 62, 1, 4.9],
-  [62, 78, 1, 0.8],
-  [110, 70, 1, 3.9],
-  [140, 88, 2, 6.1],
-  [176, 64, 1, 1.7],
-  [14, 96, 1, 5.2],
-  [84, 102, 1, 2.4],
+/** The time of day for a local hour: dawn 5–7, day 7–17, dusk 17–19, night 19–5. */
+export const periodOf = (hour: number): Period =>
+  hour >= 5 && hour < 7 ? 'dawn' : hour >= 7 && hour < 17 ? 'day' : hour >= 17 && hour < 19 ? 'dusk' : 'night'
+
+// Sky colors, top to bottom. None is orange: in the brand that is the puppy's headphones alone.
+const SKY: Record<Weather, Record<Period, readonly [string, string]>> = {
+  clear: {
+    dawn: ['#2e2b28', '#8a8f9a'],
+    day: ['#9aa3ad', '#d6d4ce'],
+    dusk: ['#3a3f4a', '#7a7488'],
+    night: ['#201f1d', '#2e2b28'],
+  },
+  rain: {
+    dawn: ['#2c2e31', '#5d636b'],
+    day: ['#7d858d', '#a9adb0'],
+    dusk: ['#30343b', '#555a63'],
+    night: ['#1b1d1f', '#2a2d30'],
+  },
+}
+const STAR = '#efe8da'
+const NEBULA = { warm: '#443c35', warmLow: '#3b3530', blue: '#313840', blueLow: '#2b3036' }
+const PLANET = { body: '#5d5750', lit: '#77706a' }
+const CLOUD = '#e8e6e1'
+const RAIN = '#b4bac1'
+const WINDOW = '#e9e4da' // the brand's night-screen text white
+
+/** The scene names: one per palette, time of day and weather, so a change redraws (letters, digits and - only). */
+export const SCENE_ID = 'puppy-sky'
+export const sceneName = (palette: PaletteName, period: Period, weather: Weather): string =>
+  `${SCENE_ID}-${palette}-${period}-${weather}`
+export const readSceneName = (
+  name: string,
+): { palette: PaletteName; period: Period; weather: Weather } | undefined => {
+  if (!name.startsWith(`${SCENE_ID}-`)) return undefined
+  const [palette, period, weather, ...rest] = name.slice(SCENE_ID.length + 1).split('-')
+  if (rest.length > 0) return undefined
+  if (palette !== 'baibai' && palette !== 'eyecare') return undefined
+  if (period !== 'dawn' && period !== 'day' && period !== 'dusk' && period !== 'night') return undefined
+  if (weather !== 'clear' && weather !== 'rain') return undefined
+  return { palette, period, weather }
+}
+
+type Star = readonly [x: number, y: number, cross: boolean, group: 0 | 1 | 2, delay: number]
+
+const SLIM_STARS: readonly Star[] = [
+  [2, 6, false, 0, 0], [10, 12, true, 1, 2.1], [4, 26, false, 2, 4.3], [12, 36, false, 0, 1.2],
+  [6, 46, false, 1, 5.6], [2, 60, false, 2, 2.7], [12, 64, false, 0, 4.9], [4, 82, false, 1, 0.8],
+]
+const WIDE_STARS: readonly Star[] = [
+  [10, 6, true, 0, 0], [26, 16, false, 1, 2.1], [44, 6, false, 2, 4.3], [52, 28, false, 0, 1.2],
+  [96, 8, true, 1, 2.7], [100, 30, false, 2, 5.6], [8, 26, false, 0, 4.9], [16, 56, false, 1, 0.8],
+  [62, 40, false, 2, 3.9], [70, 56, true, 0, 6.1], [98, 62, false, 1, 1.7], [38, 60, false, 2, 2.4],
 ]
 
-const P = 2 // one art pixel, in view units
+const rect = (x: number, y: number, w: number, h: number, fill?: string, extra = ''): string =>
+  `<rect x="${x}" y="${y}" width="${w}" height="${h}"${fill ? ` fill="${fill}"` : ''}${extra}/>`
 
-const star = ([x, y, size, delay]: (typeof STARS)[number], i: number): string => {
-  const cls = `s s${i % 3}`
-  const style = `animation-delay:-${delay}s`
-  if (size === 1) {
-    return `<rect class="${cls}" style="${style}" x="${x}" y="${y}" width="${P}" height="${P}"/>`
+const star = ([x, y, cross, group, delay]: Star): string =>
+  cross
+    ? `<g class="s s${group}" style="animation-delay:-${delay}s">${rect(x, y, 2, 6)}${rect(x - 2, y + 2, 6, 2)}</g>`
+    : rect(x, y, 2, 2, undefined, ` class="s s${group}" style="animation-delay:-${delay}s"`)
+
+// The sky inside one frame: w×h art pixels, the stars it may show, and where
+// its nebulae, planet and clouds sit.
+type Layout = {
+  w: number
+  h: number
+  stars: readonly Star[]
+  nebula: string
+  planet: readonly [number, number]
+  clouds: readonly (readonly [number, number, number])[]
+  /** shooting stars: start x, start y, travel x, travel y */
+  meteors: readonly (readonly [number, number, number, number])[]
+}
+
+const SLIM: Layout = {
+  w: 16,
+  h: 88,
+  stars: SLIM_STARS,
+  nebula:
+    rect(6, 18, 10, 4, NEBULA.blue) + rect(8, 22, 8, 2, NEBULA.blueLow) +
+    rect(0, 50, 10, 4, NEBULA.warm) + rect(2, 46, 6, 4, NEBULA.warm) + rect(0, 54, 12, 2, NEBULA.warmLow),
+  planet: [8, 70],
+  clouds: [[0, 20, 10], [6, 48, 10]],
+  meteors: [[14, 4, -12, 24], [16, 30, -14, 26]],
+}
+const WIDE: Layout = {
+  w: 108,
+  h: 68,
+  stars: WIDE_STARS,
+  nebula:
+    rect(10, 38, 36, 6, NEBULA.warm) + rect(18, 32, 24, 6, NEBULA.warm) + rect(24, 44, 30, 4, NEBULA.warmLow) +
+    rect(58, 14, 32, 6, NEBULA.blue) + rect(64, 8, 18, 6, NEBULA.blue) + rect(54, 20, 26, 4, NEBULA.blueLow),
+  planet: [84, 48],
+  clouds: [[8, 14, 30], [52, 30, 36], [24, 48, 24]],
+  meteors: [[96, 4, -40, 26], [70, 2, -34, 30]],
+}
+
+const planet = ([x, y]: readonly [number, number]): string =>
+  rect(x + 1, y, 4, 2, PLANET.body) + rect(x, y + 2, 6, 4, PLANET.body) + rect(x + 1, y + 6, 4, 2, PLANET.body) +
+  rect(x + 1, y + 2, 2, 2, PLANET.lit)
+
+// A shooting star: a short pixel streak, hidden at rest, crossing once a cycle.
+// Each has its own keyframes (no CSS variables), named by the frame width.
+const meteor = (w: number) => ([x, y, dx, dy]: readonly [number, number, number, number], i: number): string =>
+  `<style>.m-${w}-${i}{animation-name:shoot-${w}-${i}}` +
+  `@keyframes shoot-${w}-${i}{0%,95.9%{opacity:0;transform:translate(0,0)}96%{opacity:1;transform:translate(0,0)}100%{opacity:0;transform:translate(${dx}px,${dy}px)}}</style>` +
+  `<g class="m m${i} m-${w}-${i}">` +
+  rect(x, y, 2, 2, STAR) + rect(x + 2, y - 2, 2, 2, STAR, ' opacity=".6"') + rect(x + 4, y - 4, 2, 2, STAR, ' opacity=".3"') +
+  `</g>`
+
+// Rain: two stacked copies of the same streaks slide down one sky height, so it loops.
+const rain = (l: Layout): string => {
+  const streaks: string[] = []
+  const step = l.w > 40 ? 9 : 5
+  for (let x = 1, i = 0; x < l.w; x += step, i++) {
+    for (let y = (i * 13) % 17; y < l.h; y += 17) streaks.push(rect(x, y, 1, 4))
   }
+  const one = streaks.join('')
+  const drops = [0, 1, 2].map(i => {
+    const x = Math.round(((i + 1) * l.w) / 4) - 1
+    return rect(x, 4 + i * 6, 2, 2, RAIN, ` class="drop drop-${l.w}" style="animation-delay:-${i * 4.5}s"`)
+  })
+  const town = rect(0, l.h - 8, l.w, 8, '#15171a') + rect(Math.round(l.w / 2), l.h - 12, Math.round(l.w / 3), 4, '#15171a')
+  const windows = [0.2, 0.55, 0.8].map(
+    (f, i) => rect(Math.round(f * l.w), l.h - 6, 2, 2, WINDOW, ` class="win" style="animation-delay:-${i * 3.7}s"`),
+  )
   return (
-    `<g class="${cls}" style="${style}">` +
-    `<rect x="${x}" y="${y - P}" width="${P}" height="${P * 3}"/>` +
-    `<rect x="${x - P}" y="${y}" width="${P * 3}" height="${P}"/>` +
-    `</g>`
+    `<g class="rain-${l.w}" fill="${RAIN}" opacity=".45"><g>${one}</g><g transform="translate(0 -${l.h})">${one}</g></g>` +
+    `<style>.rain-${l.w}{animation:fall-${l.w} 7s linear infinite}@keyframes fall-${l.w}{from{transform:translateY(0)}to{transform:translateY(${l.h}px)}}` +
+    `.drop-${l.w}{animation-name:slide-${l.w}}@keyframes slide-${l.w}{0%{transform:translateY(0);opacity:.6}85%{opacity:.6}100%{transform:translateY(${l.h - 10}px);opacity:0}}</style>` +
+    town + windows.join('') + drops.join('')
   )
 }
 
-const sky = (): string => {
-  const { x, y, w, h } = F
-  const inner = { x: x + 8, y: y + 8, w: w - 16, h: h - 16 }
-  return [
-    // string and nail
-    `<path class="cord" d="M${x + 40} ${y} L${x + w / 2} ${y - 34} L${x + w - 40} ${y}" fill="none" stroke-width="2"/>`,
-    `<rect class="nail" x="${x + w / 2 - 3}" y="${y - 38}" width="6" height="6"/>`,
-    // soft shadow, then the frame itself
-    `<rect class="shade" x="${x + 4}" y="${y + 6}" width="${w}" height="${h}"/>`,
-    `<rect class="frame" x="${x}" y="${y}" width="${w}" height="${h}"/>`,
-    `<rect class="frame-in" x="${x + 4}" y="${y + 4}" width="${w - 8}" height="${h - 8}"/>`,
-    // the sky
-    `<svg x="${inner.x}" y="${inner.y}" width="${inner.w}" height="${inner.h}" viewBox="0 0 ${inner.w} ${inner.h}">`,
-    `<rect width="${inner.w}" height="${inner.h}" fill="url(#night)"/>`,
-    `<g class="neb">`,
-    `<rect x="20" y="58" width="60" height="10" fill="#443c35"/>`,
-    `<rect x="34" y="50" width="40" height="8" fill="#443c35"/>`,
-    `<rect x="44" y="68" width="48" height="8" fill="#3b3530"/>`,
-    `<rect x="100" y="26" width="52" height="8" fill="#313840"/>`,
-    `<rect x="110" y="18" width="30" height="8" fill="#313840"/>`,
-    `<rect x="92" y="34" width="44" height="6" fill="#2b3036"/>`,
-    `</g>`,
-    // a small grey planet, low in the corner
-    `<rect x="146" y="84" width="10" height="2" fill="#5d5750"/>`,
-    `<rect x="144" y="86" width="14" height="8" fill="#5d5750"/>`,
-    `<rect x="146" y="94" width="10" height="2" fill="#5d5750"/>`,
-    `<rect x="148" y="86" width="4" height="2" fill="#77706a"/>`,
-    `<g class="stars">${STARS.map(star).join('')}</g>`,
-    `</svg>`,
-  ].join('')
+const sky = (l: Layout, period: Period, weather: Weather): string => {
+  const id = `sky-${l.w}`
+  const [top, bottom] = SKY[weather][period]
+  const parts = [
+    `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient></defs>`,
+    rect(0, 0, l.w, l.h, `url(#${id})`),
+  ]
+  if (weather === 'rain') {
+    parts.push(rain(l))
+  } else if (period === 'day') {
+    parts.push(`<g class="cloud" fill="${CLOUD}" opacity=".7">${l.clouds.map(([x, y, w]) => rect(x, y, w, 2) + rect(x + 2, y - 2, w - 4, 2)).join('')}</g>`)
+  } else {
+    const shown = period === 'night' ? l.stars : period === 'dusk' ? l.stars.slice(0, 4) : l.stars.slice(0, 2)
+    if (period !== 'dawn') parts.push(`<g class="neb" opacity="${period === 'night' ? 0.9 : 0.5}">${l.nebula}</g>`)
+    parts.push(planet(l.planet))
+    parts.push(`<g class="stars" fill="${STAR}">${shown.map(star).join('')}</g>`)
+    if (period === 'night') parts.push(l.meteors.map(meteor(l.w)).join(''))
+  }
+  return `<svg width="${l.w}" height="${l.h}" viewBox="0 0 ${l.w} ${l.h}">${parts.join('')}</svg>`
 }
 
-export const drawScene = (p: Palette = BRAND): string => {
-  const { light: l, dark: d } = p
+export const drawScene = (palette: PaletteName = 'baibai', period: Period = 'night', weather: Weather = 'clear'): string => {
+  const { light: l, dark: d } = paletteFor(palette)
+  const slim = sky(SLIM, period, weather).replace('<svg ', '<svg x="210" y="88" ')
+  const wide = sky(WIDE, period, weather).replace('<svg ', '<svg x="221" y="98" ')
   return [
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMaxYMin meet" shape-rendering="crispEdges">`,
-  `<defs><linearGradient id="night" x1="0" y1="0" x2="0" y2="1">`,
-  `<stop offset="0" stop-color="#151412"/><stop offset="1" stop-color="#23211e"/>`,
-  `</linearGradient></defs>`,
-  `<style>`,
-  `.wall{fill:${l.wall}}`,
-  `.frame{fill:${l.edge}}.frame-in{fill:${l.line}}.shade{fill:${l.text};opacity:.08}`,
-  `.cord{stroke:${l.edge}}.nail{fill:${l.muted}}`,
-  `@media (prefers-color-scheme: dark){`,
-  `.wall{fill:${d.wall}}.frame{fill:${d.edge}}.frame-in{fill:${d.line}}.shade{fill:#000;opacity:.25}`,
-  `.cord{stroke:${d.edge}}.nail{fill:${d.muted}}}`,
-  `.stars{fill:#efe8da}`,
-  `.s{opacity:.85;animation:tw 7s ease-in-out infinite}`,
-  `.s1{animation-duration:9s}.s2{animation-duration:11s}`,
-  `@keyframes tw{0%,100%{opacity:.85}50%{opacity:.3}}`,
-  `.neb{opacity:.9;animation:drift 40s ease-in-out infinite alternate}`,
-  `@keyframes drift{from{transform:translateX(0)}to{transform:translateX(6px)}}`,
-  `</style>`,
-  `<rect class="wall" x="-20000" y="-20000" width="40000" height="40000"/>`,
-  sky(),
-  `</svg>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" shape-rendering="crispEdges">`,
+    `<style>`,
+    `.wall{fill:${l.wall}}`,
+    `.frame{fill:${l.edge}}.frame-in{fill:${l.line}}.shade{fill:${l.text};opacity:.08}`,
+    `.cord{stroke:${l.edge}}.nail{fill:${l.muted}}`,
+    `@media (prefers-color-scheme: dark){`,
+    `.wall{fill:${d.wall}}.frame{fill:${d.edge}}.frame-in{fill:${d.line}}.shade{fill:#000;opacity:.25}`,
+    `.cord{stroke:${d.edge}}.nail{fill:${d.muted}}}`,
+    `.slim,.wide{display:none}`,
+    `@media (min-width: 1364px) and (max-width: 1619px) and (min-height: 320px){.slim{display:inline}}`,
+    `@media (min-width: 1620px) and (min-height: 320px){.wide{display:inline}}`,
+    `.s{opacity:.85;animation:tw 7s ease-in-out infinite}`,
+    `.s1{animation-duration:9s}.s2{animation-duration:11s}`,
+    `@keyframes tw{0%,100%{opacity:.85}50%{opacity:.3}}`,
+    `.neb,.cloud{animation:drift 40s ease-in-out infinite alternate}`,
+    `@keyframes drift{from{transform:translateX(0)}to{transform:translateX(2px)}}`,
+    // shooting stars rest hidden; each crosses for the last 4% of its cycle (about 2 seconds)
+    `.m{opacity:0;animation-duration:47s;animation-timing-function:linear;animation-iteration-count:infinite}.m1{animation-duration:59s;animation-delay:-21s}`,
+    `.drop{opacity:.6;animation-duration:14s;animation-timing-function:ease-in;animation-iteration-count:infinite}`,
+    `.win{opacity:.55;animation:glow 11s ease-in-out infinite}`,
+    `@keyframes glow{0%,100%{opacity:.3}50%{opacity:.8}}`,
+    `</style>`,
+    `<rect class="wall" width="100%" height="100%"/>`,
+    `<g class="slim">`,
+    `<path class="cord" d="M211 84 L218 68 L225 84" fill="none" stroke-width="1"/>`,
+    rect(216, 66, 4, 4, undefined, ' class="nail"'),
+    rect(208, 87, 24, 96, undefined, ' class="shade"'),
+    rect(206, 84, 24, 96, undefined, ' class="frame"'),
+    rect(208, 86, 20, 92, undefined, ' class="frame-in"'),
+    slim,
+    `</g>`,
+    `<g class="wide">`,
+    `<path class="cord" d="M239 92 L275 70 L311 92" fill="none" stroke-width="2"/>`,
+    rect(273, 68, 4, 4, undefined, ' class="nail"'),
+    rect(217, 96, 120, 80, undefined, ' class="shade"'),
+    rect(215, 92, 120, 80, undefined, ' class="frame"'),
+    rect(217, 94, 116, 76, undefined, ' class="frame-in"'),
+    wide,
+    `</g>`,
+    `</svg>`,
   ].join('')
 }

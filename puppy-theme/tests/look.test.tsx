@@ -5,7 +5,7 @@ import { GLASS, lookColors, lookFor } from '../hooks/look'
 import { makeColors } from '../hooks/make-colors.js'
 import { BRAND, contrast as ratio, deriveEyeCare, paletteFor, PALETTE_NAMES, ROLES } from '../hooks/palette'
 import { DEFAULT_PREFS, parsePrefs } from '../hooks/prefs'
-import { drawScene, SCENE_ID } from '../hooks/scene'
+import { drawScene, periodOf, readSceneName, sceneName } from '../hooks/scene'
 import { BOOKMARK, STYLES, TAPE } from '../hooks/style'
 
 // WCAG contrast of two colors; an 8-digit hex is laid over `under` first
@@ -112,20 +112,54 @@ test('each message style keeps its words at 3:1 on every color it draws', () => 
   expect(JSON.stringify(STYLES).toLowerCase()).not.toMatch(/#f08a3c/)
 })
 
-test('the scene is pure vector, slow and small enough', () => {
-  const scene = drawScene()
-  expect(scene.length).toBeLessThan(131_072)
-  expect(scene).not.toMatch(/<image|<text|<foreignObject|href|CDATA|undefined/)
-  expect(scene).toContain('crispEdges')
-  // every animation lasts 7 seconds or more: nothing flashes
-  for (const [, s] of scene.matchAll(/(\d+(?:\.\d+)?)s (?:ease|linear)/g)) {
-    expect(Number(s)).toBeGreaterThanOrEqual(7)
+const PERIODS = ['dawn', 'day', 'dusk', 'night'] as const
+
+test('every scene is pure vector, slow, small enough and free of orange', () => {
+  for (const palette of PALETTE_NAMES) {
+    for (const period of PERIODS) {
+      for (const weather of ['clear', 'rain'] as const) {
+        const scene = drawScene(palette, period, weather)
+        expect(scene.length).toBeLessThan(131_072)
+        expect(scene).not.toMatch(/<image|<text|<foreignObject|href|CDATA|undefined|NaN|var\(/)
+        expect(scene).toContain('crispEdges')
+        expect(scene.toLowerCase()).not.toMatch(/#f08a3c|#e07b35/)
+        // every animation lasts 7 seconds or more: nothing flashes
+        const times = [...scene.matchAll(/(?:animation(?:-duration)?:[a-z-]* ?)(\d+(?:\.\d+)?)s/g)].map(m => Number(m[1]))
+        expect(times.length).toBeGreaterThan(0)
+        for (const s of times) expect(s).toBeGreaterThanOrEqual(7)
+      }
+    }
   }
+})
+
+test('the sky follows the hour and the rain sounds', () => {
+  expect([4, 5, 6, 7, 12, 16, 17, 18, 19, 23, 0].map(periodOf)).toEqual(
+    ['night', 'dawn', 'dawn', 'day', 'day', 'day', 'dusk', 'dusk', 'night', 'night', 'night'],
+  )
+  const night = drawScene('baibai', 'night', 'clear')
+  const day = drawScene('baibai', 'day', 'clear')
+  const rain = drawScene('baibai', 'night', 'rain')
+  expect(night).toContain('class="m m0')
+  expect(night).toContain('class="s s0"')
+  expect(day).not.toContain('class="s ')
+  expect(day).not.toContain('class="m ')
+  expect(rain).toContain('rain-16')
+  expect(rain).not.toContain('class="s ')
+  // a shooting star rests hidden, so with motion reduced there is none
+  expect(night).toMatch(/\.m\{opacity:0;/)
+  // the slim frame hangs beside the sidebar, the wide one past 1620 px
+  expect(night).toContain('min-width: 1364px')
+  expect(night).toContain('x="206" y="84" width="24" height="96" class="frame"')
+  expect(lookFor({ ...DEFAULT_PREFS, sounds: 'rain' }, 12).backdrop).toMatchObject({ scene: 'puppy-sky-baibai-day-rain' })
+  expect(lookFor({ ...DEFAULT_PREFS, colors: 'eyecare' }, 18).backdrop).toMatchObject({ scene: 'puppy-sky-eyecare-dusk-clear' })
+  expect(readSceneName('puppy-sky-eyecare-dawn-rain')).toEqual({ palette: 'eyecare', period: 'dawn', weather: 'rain' })
+  expect(readSceneName('framed-night')).toBeUndefined()
+  expect(readSceneName('puppy-sky-gruvbox-night-clear')).toBeUndefined()
 })
 
 test('the look follows each pick', () => {
   const full = lookFor(DEFAULT_PREFS)
-  expect(full.backdrop).toMatchObject({ scene: SCENE_ID, glass: GLASS.frosted })
+  expect(full.backdrop).toMatchObject({ scene: sceneName('baibai', 'night', 'clear'), glass: GLASS.frosted })
   expect(lookFor({ ...DEFAULT_PREFS, glass: false }).backdrop).toMatchObject({ glass: GLASS.clear })
   expect(full.style).toBeDefined()
   expect(Object.keys(full.sound?.cues ?? {})).toHaveLength(7)
@@ -168,7 +202,7 @@ test('the backdrop draws our scene on the desktop and leaves others alone', asyn
     const { Text } = $.ui.resolve(e)
     return <Text>engine</Text>
   })
-  const ui = await $.ui.mount({ ...backdrop(SCENE_ID), surface: 'desktop' })
+  const ui = await $.ui.mount({ ...backdrop(sceneName('eyecare', 'day', 'rain')), surface: 'desktop' })
   const svg = await ui.find({ type: 'Svg' })
   expect(svg).toBeTruthy()
   // drawn as an image, so a click on the wall reaches the app (its click cue)
