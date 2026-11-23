@@ -2,7 +2,7 @@ import type { PaletteName } from './palette'
 import { PALETTES } from './palette'
 import type { CueName, Prefs, Wall } from '../types'
 
-// What the person picked in the /puppy-look pane. One source: the pane writes
+// What the person picked in the /look pane. One source: the pane writes
 // it, $.store keeps it across sessions on this computer, and the look is made
 // from it alone.
 

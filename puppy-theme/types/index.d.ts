@@ -7,7 +7,7 @@ export type CueName = 'send' | 'tool' | 'compact' | 'done' | 'ask' | 'error' | '
 // sky: the framed night sky on the wall; plain: the palette's wall color alone
 export type Wall = 'sky' | 'plain'
 
-// what the person picked in the /puppy-look pane; kept in $.store under 'prefs'
+// what the person picked in the /look pane; kept in $.store under 'prefs'
 export type Prefs = {
   palette: PaletteName
   wall: Wall

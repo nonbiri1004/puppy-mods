@@ -7,9 +7,9 @@ import { sceneId } from '../hooks/scene'
 const PANE = {
   plugin: 'puppy-theme',
   component: 'Pane',
-  requestId: 'puppy-look',
+  requestId: 'look',
   props: {
-    title: 'puppy look',
+    title: 'look',
     isFocused: false,
     bodyColumns: 48,
     placement: 'dock',
@@ -36,7 +36,7 @@ const engine = (on: Parameters<TestBody>[1], stored: unknown) => {
     logs.push(e)
     return { value: undefined }
   })
-  on('command.register', () => ({ value: { command: 'puppy-look' } }))
+  on('command.register', () => ({ value: { command: 'look' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   return { store, sets, logs }
@@ -72,7 +72,7 @@ test('a build that refuses style or sound still gets colors and the backdrop', a
     sets.push(e)
     return { value: { isDrawn: true as const, requestId: 'test' } }
   })
-  on('command.register', () => ({ value: { command: 'puppy-look' } }))
+  on('command.register', () => ({ value: { command: 'look' } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   expect(sets).toHaveLength(1)

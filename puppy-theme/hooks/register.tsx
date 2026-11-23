@@ -7,7 +7,7 @@ import { PALETTES, type PaletteName } from './palette'
 import { CUES, DEFAULT_PREFS, parsePrefs, STORE_KEY, WALLS } from './prefs'
 import { paletteOfScene, sceneFor } from './scene'
 
-const PANE = 'puppy-look'
+const PANE = 'look'
 
 // What the pane draws from: the session's copy of what $.store keeps.
 const prefsAtom = atom({ plugin: 'puppy-theme', key: 'prefs' } as const, DEFAULT_PREFS)
@@ -53,16 +53,16 @@ const pick = async ($: EngineInterface, change: (p: Prefs) => Prefs): Promise<vo
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'puppy-look', description: "pick the puppy's palette, wall, message style and sounds" })
+    await $.command.register({ name: 'look', description: "pick the puppy's palette, wall, message style and sounds" })
     const prefs = parsePrefs(await $.store.get(STORE_KEY))
     await update($, prefsAtom, () => prefs)
     await wear($, prefs)
     return next(e)
   })
 
-  on('command.run', { command: 'puppy-look' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'puppy look' })
-    return { text: 'puppy look opened.' }
+  on('command.run', { command: 'look' }, async $ => {
+    await $.ui.open({ id: PANE, title: 'look' })
+    return { text: 'look opened.' }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
