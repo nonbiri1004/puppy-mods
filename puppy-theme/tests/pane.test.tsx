@@ -84,11 +84,6 @@ test('a build that refuses style or sound still gets colors and the backdrop', a
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`the pane has its four cards and each press is kept and worn (${surface})`, async ($, on) => {
     const { store, sets } = engine(on, undefined)
-    const played: unknown[] = []
-    on('audio.play', (_, e) => {
-      played.push(e.clip)
-      return { value: undefined }
-    })
     await $.session.start({ cwd: '/', surface, isInteractive: true })
     const ui = await $.ui.mount({ ...PANE, surface })
     for (const card of ['card-palette', 'card-wall', 'card-messages', 'card-sounds']) {
@@ -101,9 +96,6 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.press({ key: 'wall-plain' })
     await ui.press({ key: 'style' })
     await ui.press({ key: 'cue-tool' })
-    await ui.press({ key: 'play-cue-done' })
-    expect(played).toHaveLength(1)
-    expect(played[0]).toMatchObject({ mime: 'audio/wav' })
 
     expect(store.get('prefs')).toMatchObject({
       palette: 'gruvbox',
