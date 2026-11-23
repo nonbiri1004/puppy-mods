@@ -69,7 +69,6 @@ every set also has a quiet background (a hum, a fan, rain); the speaker's own me
 
 - the terminal and editors draw no theme. `/look` still opens there, and what you pick counts in the desktop app.
 - permission prompts, questions, code blocks and the message box keep the app's own look.
-- with the message style on, claude's reply text keeps the app's own color (a slightly greyer white than the palette's text). turn messages off to give it the palette's color.
 - your accessibility settings win over the message style (a bigger font, more contrast).
 - it reads nothing of yours and sends nothing anywhere. the picks are one small entry in the mod's own store.
 

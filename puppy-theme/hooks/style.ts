@@ -9,10 +9,9 @@ import type { Palette } from './palette'
 // plain on the page, a little airier. Tool rows are quiet code-font strips.
 
 // The message colors per mode: named in the style, so it follows light and dark.
-// Claude's replies take the palette's text color too, but only while the
-// message style is off: with a style on, the 2.1.330 desktop app keeps its own
-// reply text color, whatever a Text or AssistantMessage rule names (tried
-// 2026-11-23: a token, text-primary, and an opaque box under it).
+// Claude's replies take the palette's text color too (checked 2026-11-23 with
+// a red test color: it draws with the message style on or off). Thin reply
+// text still looks a little greyer than an editor's heavier code font.
 export const messageColors = (p: Palette): Record<'light' | 'dark', ThemeColorInputs> => ({
   light: { 'bg-user-message': p.light.card, 'text-user-message': p.light.text, 'text-assistant-message': p.light.text, 'bg-assistant-message': p.light.wall },
   dark: { 'bg-user-message': p.dark.card, 'text-user-message': p.dark.text, 'text-assistant-message': p.dark.text, 'bg-assistant-message': p.dark.wall },
