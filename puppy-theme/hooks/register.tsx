@@ -25,13 +25,16 @@ const wear = async ($: EngineInterface, name: PaletteName): Promise<void> => {
   }
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const chosen = String(options.palette ?? '')
+  const start: PaletteName = isPalette(chosen) ? chosen : DEFAULT_PALETTE
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'puppy-look',
-      description: `switch the puppy's palette: ${Object.keys(PALETTES).join(' or ')}`,
+      description: `switch the puppy's palette for this session: ${Object.keys(PALETTES).join(' or ')}`,
     })
-    await wear($, DEFAULT_PALETTE)
+    await wear($, start)
     return next(e)
   })
 

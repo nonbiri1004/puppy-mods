@@ -96,3 +96,15 @@ test('the backdrop draws our scenes on the desktop and leaves others alone', asy
   expect((await other.find({ type: 'Text' }))?.text).toBe('engine')
   await other.unmount()
 })
+
+test('the palette setting picks the look a session starts in', { options: { palette: 'gruvbox' } }, async ($, on) => {
+  const sets: unknown[] = []
+  on('theme.set', (_, e) => {
+    sets.push(e)
+    return { value: { isDrawn: true as const, requestId: 'test' } }
+  })
+  on('command.register', () => ({ value: { command: 'puppy-look' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(sets[0]).toMatchObject({ backdrop: { scene: sceneId('gruvbox') } })
+})

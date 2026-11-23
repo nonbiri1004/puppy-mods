@@ -1,7 +1,7 @@
 {
   "name": "puppy-theme",
   "version": "0.1.0",
-  "description": "the lofi puppy's look for the desktop app: warm greys by day and night, a small framed night sky on the wall",
+  "description": "the lofi puppy's look for the desktop app: warm greys or gruvbox-style colors, a small framed night sky on the wall, pixel message cards and soft sounds",
   "author": {
     "name": "lofi puppy",
     "url": "https://github.com/nonbiri1004"
@@ -9,5 +9,22 @@
   "homepage": "https://github.com/nonbiri1004/puppy-mods/tree/main/puppy-theme",
   "repository": "https://github.com/nonbiri1004/puppy-mods",
   "license": "MIT",
-  "keywords": ["theme", "look", "puppy", "lofi"]
+  "keywords": [
+    "theme",
+    "look",
+    "puppy",
+    "lofi"
+  ],
+  "userConfig": {
+    "palette": {
+      "type": "string",
+      "title": "Palette",
+      "description": "warm: the lofi puppy's warm greys (paper by day, charcoal by night). gruvbox: retro cream and brown-black, after the open gruvbox palette, without its orange. /puppy-look switches it for one session.",
+      "default": "warm",
+      "options": [
+        "warm",
+        "gruvbox"
+      ]
+    }
+  }
 }
