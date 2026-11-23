@@ -96,18 +96,21 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.press({ key: 'wall-plain' })
     await ui.press({ key: 'style' })
     await ui.press({ key: 'cue-tool' })
+    await ui.press({ key: 'sounds-rain' })
 
     expect(store.get('prefs')).toMatchObject({
       palette: 'gruvbox',
       wall: 'plain',
       style: false,
+      sounds: 'rain',
       cues: { tool: false, send: true },
     })
     const last = sets.at(-1)
     expect(last?.backdrop).toBeUndefined()
     expect(last?.style).toBeUndefined()
     expect(Object.keys(last?.sound?.cues ?? {})).not.toContain('tool')
-    expect((await ui.find({ type: 'Text', text: /6 of 7/ }))?.text).toBe('6 of 7')
+    expect((await ui.find({ type: 'Text', text: /6 of 7/ }))?.text).toBe('rain · 6 of 7')
+    expect(last?.sound?.cues?.send?.layers[0]).toMatchObject({ notes: ['E5', 'A5'] })
     await ui.unmount()
   })
 }

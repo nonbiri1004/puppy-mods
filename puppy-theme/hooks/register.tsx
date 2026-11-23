@@ -4,8 +4,9 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { CueName, Prefs, Wall } from '../types'
 import { baseLook, colorsFor, lookFor, unpainted } from './look'
 import { PALETTES, type PaletteName } from './palette'
-import { CUES, DEFAULT_PREFS, parsePrefs, STORE_KEY, WALLS } from './prefs'
+import { CUES, DEFAULT_PREFS, parsePrefs, SOUND_SETS, STORE_KEY, WALLS } from './prefs'
 import { paletteOfScene, sceneFor } from './scene'
+import { SOUND_LABEL } from './sound'
 
 const PANE = 'look'
 
@@ -123,9 +124,13 @@ export const register: Register = on => {
         <Box key="card-sounds" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
           <Box flexDirection="row" justifyContent="space-between">
             <Text weight="semibold">sounds</Text>
-            <Text dimColor>{`${cuesOn} of ${CUES.length}`}</Text>
+            <Text dimColor>{`${prefs.sounds} · ${cuesOn} of ${CUES.length}`}</Text>
           </Box>
           <Text dimColor>play once the speaker in the title bar is on</Text>
+          {SOUND_SETS.map(set =>
+            choice(`sounds-${set}`, prefs.sounds === set, SOUND_LABEL[set], () => pick($, p => ({ ...p, sounds: set }))),
+          )}
+          <Text dimColor>when each one plays</Text>
           {CUES.map(c =>
             toggle(`cue-${c}`, prefs.cues[c], c, CUE_LABEL[c], () =>
               pick($, p => ({ ...p, cues: { ...p.cues, [c]: !p.cues[c] } })),

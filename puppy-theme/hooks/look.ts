@@ -6,7 +6,7 @@ import { makeColors } from './make-colors.js'
 import { PALETTES, type Mode, type PaletteName } from './palette'
 import { CUES } from './prefs'
 import { sceneId } from './scene'
-import { SOUND } from './sound'
+import { SOUNDS } from './sound'
 import { STYLE, messageColors } from './style'
 
 const anchors = (m: Mode) => ({
@@ -52,10 +52,10 @@ export const baseLook = (prefs: Prefs): ThemeSetArgs => ({
 })
 
 /** The sound with only the cues the person kept; the ambience stays (the app's speaker turns it off). */
-export const soundFor = (prefs: Prefs): ThemeSound => ({
-  ...SOUND,
-  cues: Object.fromEntries(CUES.filter(c => prefs.cues[c]).map(c => [c, SOUND.cues?.[c]])),
-})
+export const soundFor = (prefs: Prefs): ThemeSound => {
+  const set = SOUNDS[prefs.sounds]
+  return { ...set, cues: Object.fromEntries(CUES.filter(c => prefs.cues[c]).map(c => [c, set.cues?.[c]])) }
+}
 
 /** The whole look the person picked. */
 export const lookFor = (prefs: Prefs): ThemeSetArgs => ({
