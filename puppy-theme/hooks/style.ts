@@ -1,12 +1,14 @@
-import type { ThemeColorInputs, ThemeStyle } from 'claude-code'
+import type { ThemeColorInputs, ThemeMessageRule, ThemeStyle } from 'claude-code'
 
+import type { MessageStyle } from '../types'
 import type { Palette } from './palette'
 
 // How the conversation's own rows look. The words stay the app's text.
 //
-// Your messages are small pixel cards: corners cut in 2-point steps like the
-// puppy's own pixel art, a card grey inside a one-pixel line. Replies stay
-// plain on the page, a little airier. Tool rows are quiet code-font strips.
+// Three ways to draw your messages, picked in /look; replies stay plain on the
+// page, a little airier, and tool rows are quiet code-font strips in all three.
+// Each drawing is a nine-slice: the corners draw once, a unit a point, and the
+// edges and middle stretch to fit the message.
 
 // The message colors per mode: named in the style, so it follows light and dark.
 // Only the person's messages take them: Claude's replies already draw in
@@ -17,29 +19,78 @@ export const messageColors = (p: Palette): Record<'light' | 'dark', ThemeColorIn
   dark: { 'bg-user-message': p.dark.card, 'text-user-message': p.dark.text },
 })
 
-// A 24-unit box, a unit a point: the outline, then the card inside it.
-const OUTLINE = 'M4 0H20V2H22V4H24V20H22V22H20V24H4V22H2V20H0V4H2V2H4Z'
-const CARD = 'M4 2H20V4H22V20H20V22H4V20H2V4H4Z'
+// Raw colors that work in both modes, kept at 3:1 or more against the message
+// words in each (the app drops a rule whose words are under 3:1 on any color of
+// its drawing). tests/look.test.tsx checks them.
+export const TAPE = '#9b98916b' // grey tape, 42% over the card; never orange
+export const BOOKMARK = '#6d7a89' // slate blue, the look's accent family
+export const PAPER_SHADOW = '#00000024'
 
-export const STYLE: ThemeStyle = {
-  Text: { fontSize: 15, lineHeight: 24 },
-  Heading: { fontWeight: 'semibold' },
-  UserMessage: {
-    color: 'text-user-message',
-    backgroundColor: 'bg-user-message',
-    paddingX: 16,
-    paddingY: 12,
-    fill: {
-      vector: {
-        viewBox: 24,
-        slice: 8,
-        paths: [
-          { d: OUTLINE, color: 'border-strong' },
-          { d: CARD, color: 'bg-user-message' },
-        ],
-      },
+// pixel: the puppy's pixel card, corners cut in 2-point steps, with a stepped
+// tail at the bottom right that points at you. A 24×32 box: the outline, then
+// the card inside it; the tail sits in the bottom-right slice.
+const PIXEL: ThemeMessageRule = {
+  color: 'text-user-message',
+  backgroundColor: 'bg-user-message',
+  paddingX: 16,
+  paddingTop: 12,
+  paddingBottom: 22, // the tail takes the last 10 points
+  fill: {
+    vector: {
+      viewBox: [24, 32],
+      slice: [8, 10, 16, 8],
+      paths: [
+        { d: 'M4 0H20V2H22V4H24V32H22V30H20V28H18V26H16V24H14V22H4V20H2V18H0V4H2V2H4Z', color: 'border-strong' },
+        { d: 'M4 2H20V4H22V28H20V26H18V24H16V22H14V20H4V18H2V4H4Z', color: 'bg-user-message' },
+      ],
     },
   },
+}
+
+// tape: a square paper note with a strip of grey tape, tilted a little; two
+// notes take turns, taped on the left and on the right.
+const note = (tape: string, rotate: number): ThemeMessageRule => ({
+  color: 'text-user-message',
+  backgroundColor: 'bg-user-message',
+  paddingX: 16,
+  paddingTop: 18,
+  paddingBottom: 12,
+  rotate,
+  shadow: { y: 1, blur: 4, color: PAPER_SHADOW },
+  fill: {
+    vector: {
+      viewBox: 56,
+      slice: 26,
+      paths: [
+        { d: 'M0 5H56V56H0Z', color: 'bg-user-message' },
+        { d: tape, color: TAPE },
+      ],
+    },
+  },
+})
+const TAPED = [note('M5 1L23 0L24 11L6 12Z', -1), note('M32 0L50 1L49 12L31 11Z', 0.8)] as const
+
+// bookmark: the card with a 3-point slate blue strip down its left side.
+const BOOKMARKED: ThemeMessageRule = {
+  color: 'text-user-message',
+  backgroundColor: 'bg-user-message',
+  paddingX: 16,
+  paddingY: 12,
+  fill: {
+    vector: {
+      viewBox: 16,
+      slice: [4, 4, 4, 6],
+      paths: [
+        { d: 'M0 0H16V16H0Z', color: 'bg-user-message' },
+        { d: 'M0 0H3V16H0Z', color: BOOKMARK },
+      ],
+    },
+  },
+}
+
+const ROWS: Omit<ThemeStyle, 'UserMessage'> = {
+  Text: { fontSize: 15, lineHeight: 24 },
+  Heading: { fontWeight: 'semibold' },
   ToolUse: {
     color: 'text-secondary',
     fontFamily: ['code'],
@@ -50,3 +101,12 @@ export const STYLE: ThemeStyle = {
     paddingX: 8,
   },
 }
+
+export const STYLES: Record<Exclude<MessageStyle, 'app'>, ThemeStyle> = {
+  pixel: { ...ROWS, UserMessage: PIXEL },
+  tape: { ...ROWS, UserMessage: TAPED },
+  bookmark: { ...ROWS, UserMessage: BOOKMARKED },
+}
+
+/** The style for a pick; 'app' keeps the app's own rows. */
+export const styleFor = (pick: MessageStyle): ThemeStyle | undefined => (pick === 'app' ? undefined : STYLES[pick])

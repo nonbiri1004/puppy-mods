@@ -48,11 +48,12 @@ const engine = (on: Parameters<TestBody>[1], stored: unknown) => {
 }
 
 test('a session starts in what the pane kept', async ($, on) => {
-  const { sets, logs } = engine(on, { wall: 'plain', style: true, cues: { tool: false } })
+  const { sets, logs } = engine(on, { wall: 'plain', messages: 'tape', cues: { tool: false } })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   expect(sets).toHaveLength(1)
   expect(sets[0]?.backdrop).toBeUndefined()
   expect(Object.keys(sets[0]?.sound?.cues ?? {})).not.toContain('tool')
+  expect(sets[0]?.style?.UserMessage).toHaveLength(2)
   expect(logs).toEqual([])
 })
 
@@ -98,13 +99,15 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(note?.text).toMatch(surface === 'terminal' ? /desktop app/ : /this computer/)
 
     await ui.press({ key: 'wall-plain' })
-    await ui.press({ key: 'style' })
+    await ui.press({ key: 'messages-bookmark' })
+    expect(sets.at(-1)?.style?.UserMessage).toMatchObject({ paddingY: 12 })
+    await ui.press({ key: 'messages-app' })
     await ui.press({ key: 'cue-tool' })
     await ui.press({ key: 'sounds-rain' })
 
     expect(store.get('prefs')).toMatchObject({
       wall: 'plain',
-      style: false,
+      messages: 'app',
       sounds: 'rain',
       cues: { tool: false, send: true },
     })
@@ -119,7 +122,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 }
 
 test('the look turns off to the app\'s own and back, and reset brings the defaults', async ($, on) => {
-  const { store, sets, clears } = engine(on, { wall: 'plain', style: false, sounds: 'chip' })
+  const { store, sets, clears } = engine(on, { wall: 'plain', messages: 'app', sounds: 'chip' })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ key: 'card-reset' })).toBeTruthy()
@@ -131,7 +134,7 @@ test('the look turns off to the app\'s own and back, and reset brings the defaul
   expect(store.get('prefs')).toMatchObject({ on: false, wall: 'plain', sounds: 'chip' })
 
   await ui.press({ key: 'reset' })
-  expect(store.get('prefs')).toMatchObject({ on: true, wall: 'sky', style: true, sounds: 'lofi' })
+  expect(store.get('prefs')).toMatchObject({ on: true, wall: 'sky', messages: 'pixel', sounds: 'lofi' })
   expect(sets.at(-1)?.backdrop).toMatchObject({ scene: SCENE_ID })
   await ui.unmount()
 })

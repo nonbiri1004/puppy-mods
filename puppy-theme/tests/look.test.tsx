@@ -5,6 +5,20 @@ import { lookColors, lookFor } from '../hooks/look'
 import { PALETTE } from '../hooks/palette'
 import { DEFAULT_PREFS, parsePrefs } from '../hooks/prefs'
 import { drawScene, SCENE_ID } from '../hooks/scene'
+import { BOOKMARK, STYLES, TAPE } from '../hooks/style'
+
+// WCAG contrast of two colors; an 8-digit hex is laid over `under` first
+const rgb = (hex: string, under = '#000000'): number[] => {
+  const ch = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16)
+  const a = hex.length === 9 ? ch(hex, 3) / 255 : 1
+  return [0, 1, 2].map(i => ch(hex, i) * a + ch(under, i) * (1 - a))
+}
+const lum = (c: number[]) =>
+  c.map(v => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i]!, 0)
+const contrast = (a: number[], b: number[]) => {
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p)
+  return (x! + 0.05) / (y! + 0.05)
+}
 
 const backdrop = (scene: string) =>
   ({ plugin: 'puppy-theme', component: 'Backdrop', props: { plugin: 'puppy-theme', scene, glass: { blur: 20, opacity: 0.6 } } }) as const
@@ -20,6 +34,19 @@ test('the colors use only names the app knows, and Desktop paints them', () => {
 
 test('the warm greys carry no orange: in the brand it is the headphones alone', () => {
   expect(JSON.stringify(PALETTE).toLowerCase()).not.toMatch(/#f08a3c|#d65d0e|#fe8019|#af3a03/)
+})
+
+test('each message style keeps its words at 3:1 on every color it draws, in both modes', () => {
+  for (const mode of [PALETTE.light, PALETTE.dark]) {
+    const words = rgb(mode.text)
+    expect(contrast(words, rgb(TAPE, mode.card))).toBeGreaterThanOrEqual(3)
+    expect(contrast(words, rgb(BOOKMARK))).toBeGreaterThanOrEqual(3)
+    expect(contrast(words, rgb(mode.edge))).toBeGreaterThanOrEqual(3)
+  }
+  // every raw color a drawing uses is one of the checked ones
+  const raw = JSON.stringify(STYLES).match(/#[0-9a-f]{6,8}/gi) ?? []
+  expect([...new Set(raw)].sort()).toEqual(['#00000024', BOOKMARK, TAPE].sort())
+  expect(JSON.stringify(STYLES).toLowerCase()).not.toMatch(/#f08a3c/)
 })
 
 test('the scene is pure vector, slow and small enough', () => {
@@ -39,10 +66,13 @@ test('the look follows each pick', () => {
   expect(full.style).toBeDefined()
   expect(Object.keys(full.sound?.cues ?? {})).toHaveLength(7)
 
+  expect(lookFor({ ...DEFAULT_PREFS, messages: 'tape' }).style?.UserMessage).toHaveLength(2)
+  expect(lookFor({ ...DEFAULT_PREFS, messages: 'bookmark' }).style).toBe(STYLES.bookmark)
+
   const quiet = lookFor({
     ...DEFAULT_PREFS,
     wall: 'plain',
-    style: false,
+    messages: 'app',
     cues: { ...DEFAULT_PREFS.cues, tool: false, click: false },
   })
   expect(quiet.backdrop).toBeUndefined()
@@ -58,7 +88,11 @@ test('what an earlier version stored is read field by field', () => {
   const old = parsePrefs({ palette: 'gruvbox', wall: 'app', cards: false, cues: { tool: false, beep: true } })
   expect(old).not.toHaveProperty('palette')
   expect(old.wall).toBe('sky')
-  expect(old.style).toBe(true)
+  expect(old.messages).toBe('pixel')
+  // the on/off switch an earlier build kept turns into a pick
+  expect(parsePrefs({ style: false }).messages).toBe('app')
+  expect(parsePrefs({ style: true }).messages).toBe('pixel')
+  expect(parsePrefs({ messages: 'tape', style: false }).messages).toBe('tape')
   expect(old.cues.tool).toBe(false)
   expect(old.cues.send).toBe(true)
   expect(old.cues).not.toHaveProperty('beep')

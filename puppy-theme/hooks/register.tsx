@@ -1,9 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { CueName, Prefs, Wall } from '../types'
+import type { CueName, MessageStyle, Prefs, Wall } from '../types'
 import { baseLook, lookColors, lookFor, unpainted } from './look'
-import { CUES, DEFAULT_PREFS, parsePrefs, SOUND_SETS, STORE_KEY, WALLS } from './prefs'
+import { CUES, DEFAULT_PREFS, MESSAGE_STYLES, parsePrefs, SOUND_SETS, STORE_KEY, WALLS } from './prefs'
 import { drawScene, SCENE_ID } from './scene'
 import { SOUND_LABEL } from './sound'
 
@@ -13,6 +13,12 @@ const PANE = 'look'
 const prefsAtom = atom({ plugin: 'puppy-theme', key: 'prefs' } as const, DEFAULT_PREFS)
 
 const WALL_LABEL: Record<Wall, string> = { sky: 'night sky frame', plain: 'plain wall' }
+const MESSAGE_LABEL: Record<MessageStyle, string> = {
+  pixel: 'pixel card with a tail',
+  tape: 'taped paper notes',
+  bookmark: 'card with a blue bookmark',
+  app: "the app's own rows",
+}
 const CUE_LABEL: Record<CueName, string> = {
   send: 'you send a message',
   tool: 'a tool starts',
@@ -118,10 +124,11 @@ export const register: Register = on => {
         <Box key="card-messages" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
           <Box flexDirection="row" justifyContent="space-between">
             <Text weight="semibold">messages</Text>
-            <Text dimColor>{prefs.style ? 'on' : 'off'}</Text>
+            <Text dimColor>{MESSAGE_LABEL[prefs.messages]}</Text>
           </Box>
-          {toggle('style', prefs.style, 'pixel cards, airier text, quiet tool rows', '', () =>
-            pick($, p => ({ ...p, style: !p.style })),
+          <Text dimColor>your messages; replies and tool rows stay quiet</Text>
+          {MESSAGE_STYLES.map(m =>
+            choice(`messages-${m}`, prefs.messages === m, MESSAGE_LABEL[m], () => pick($, p => ({ ...p, messages: m }))),
           )}
         </Box>
         <Box key="card-sounds" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">

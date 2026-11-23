@@ -7,7 +7,7 @@ import { PALETTE, type Mode } from './palette'
 import { CUES } from './prefs'
 import { SCENE_ID } from './scene'
 import { SOUNDS } from './sound'
-import { STYLE, messageColors } from './style'
+import { messageColors, styleFor } from './style'
 
 const anchors = (m: Mode) => ({
   'surface-0': m.wall,
@@ -60,6 +60,6 @@ export const soundFor = (prefs: Prefs): ThemeSound => {
 /** The whole look the person picked. */
 export const lookFor = (prefs: Prefs): ThemeSetArgs => ({
   ...baseLook(prefs),
-  ...(prefs.style ? { style: STYLE } : {}),
+  ...(prefs.messages === 'app' ? {} : { style: styleFor(prefs.messages) }),
   sound: soundFor(prefs),
 })
