@@ -30,6 +30,16 @@ look                                         kept on this computer
 ╰─────────────────────────────────────────────╯
 ```
 
+## install
+
+in a claude code session in your terminal:
+
+```
+/plugin install puppy-theme --marketplace nonbiri1004/puppy-mods
+```
+
+then open the desktop app's code tab: the look draws there.
+
 ## what you do
 
 - **open the settings**: `/look`. every pick is worn at once and kept on this computer, for every session.

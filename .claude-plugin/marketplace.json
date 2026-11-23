@@ -22,6 +22,11 @@
       "name": "puppy-skills",
       "source": "./puppy-skills",
       "description": "a pane listing your skills and mods, where each one works, and which skills a schedule uses"
+    },
+    {
+      "name": "puppy-theme",
+      "source": "./puppy-theme",
+      "description": "the puppy's look for the desktop app: warm grey or gruvbox colors, a framed night sky, pixel message cards and soft sounds"
     }
   ]
 }
