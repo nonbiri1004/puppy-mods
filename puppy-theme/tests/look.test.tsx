@@ -5,7 +5,6 @@ import { colorsFor, lookFor } from '../hooks/look'
 import { PALETTES, type PaletteName } from '../hooks/palette'
 import { DEFAULT_PREFS, parsePrefs } from '../hooks/prefs'
 import { sceneFor, sceneId } from '../hooks/scene'
-import { SOUND } from '../hooks/sound'
 
 const NAMES = Object.keys(PALETTES) as PaletteName[]
 const backdrop = (scene: string) =>
@@ -78,24 +77,13 @@ test('the backdrop draws our scenes on the desktop and leaves others alone', asy
   })
   for (const name of NAMES) {
     const ui = await $.ui.mount({ ...backdrop(sceneId(name)), surface: 'desktop' })
-    expect(await ui.find({ type: 'Svg' })).toBeTruthy()
+    const svg = await ui.find({ type: 'Svg' })
+    expect(svg).toBeTruthy()
+    // drawn as an image, so a click on the wall reaches the app (its click cue)
+    expect((svg as { props?: { isInteractive?: boolean } } | undefined)?.props?.isInteractive).toBeUndefined()
     await ui.unmount()
   }
   const other = await $.ui.mount({ ...backdrop('pond'), surface: 'desktop' })
   expect((await other.find({ type: 'Text' }))?.text).toBe('engine')
   await other.unmount()
-})
-
-test('while a cue is listened to, the wall click plays it, one note a click', () => {
-  const look = lookFor(DEFAULT_PREFS, 'done')
-  const click = look.sound?.cues?.click
-  const done = SOUND.cues?.done
-  expect(click?.layers).toHaveLength(done?.layers.length ?? -1)
-  expect(click?.layers.every(l => !('step' in l))).toBe(true)
-  expect(click?.layers[0]).toMatchObject({ wave: 'bell', notes: ['A5', 'F5', 'D5'] })
-  // the other cues stay as they are
-  expect(look.sound?.cues?.done).toEqual(done)
-  // a click turned off still plays while listening
-  const off = lookFor({ ...DEFAULT_PREFS, cues: { ...DEFAULT_PREFS.cues, click: false } }, 'tool')
-  expect(off.sound?.cues?.click).toEqual(SOUND.cues?.tool)
 })

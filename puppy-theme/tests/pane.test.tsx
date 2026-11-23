@@ -111,37 +111,3 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.unmount()
   })
 }
-
-test('▶ lends the wall click to a cue until ■, on the desktop only', async ($, on) => {
-  const { sets } = engine(on, undefined)
-  // the minute never ends here: the timer's dispatch stays pending
-  const fired: (() => void)[] = []
-  on('clock.after', () => new Promise<{ value: undefined }>(resolve => fired.push(() => resolve({ value: undefined }))))
-  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-
-  await ui.press({ key: 'play-cue-done' })
-  expect(sets.at(-1)?.sound?.cues?.click?.layers[0]).toMatchObject({ notes: ['A5', 'F5', 'D5'] })
-  expect((await ui.find({ type: 'Text', text: /^click the wall$/ }))?.text).toBe('click the wall')
-  expect(await ui.find({ type: 'Text', text: /left to right/ })).toBeTruthy()
-
-  await ui.press({ key: 'play-cue-done' })
-  expect(sets.at(-1)?.sound?.cues?.click?.layers[0]).toMatchObject({ notes: ['D4', 'F4', 'G4', 'A4', 'C5', 'D5', 'F5', 'A5'] })
-  expect(await ui.find({ type: 'Text', text: /^click the wall$/ })).toBeUndefined()
-
-  // after a minute the wall's own click comes back by itself
-  await ui.press({ key: 'play-cue-tool' })
-  expect(sets.at(-1)?.sound?.cues?.click).toEqual(sets.at(-1)?.sound?.cues?.tool)
-  fired.at(-1)?.()
-  const isOwnClick = () => (sets.at(-1)?.sound?.cues?.click?.layers[0] as { notes?: unknown } | undefined)?.notes
-  for (let i = 0; i < 50 && JSON.stringify(isOwnClick()) !== JSON.stringify(['D4', 'F4', 'G4', 'A4', 'C5', 'D5', 'F5', 'A5']); i++) {
-    await ui.find({ key: 'card-sounds' })
-  }
-  expect(fired.length).toBeGreaterThan(0)
-  expect(sets.at(-1)?.sound?.cues?.click?.layers[0]).toMatchObject({ notes: ['D4', 'F4', 'G4', 'A4', 'C5', 'D5', 'F5', 'A5'] })
-  await ui.unmount()
-
-  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await term.find({ key: 'play-cue-done' })).toBeUndefined()
-  await term.unmount()
-})

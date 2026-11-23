@@ -1,6 +1,6 @@
-import type { ThemeColors, ThemeCue, ThemeSetArgs, ThemeSound } from 'claude-code'
+import type { ThemeColors, ThemeSetArgs, ThemeSound } from 'claude-code'
 
-import type { CueName, Prefs } from '../types'
+import type { Prefs } from '../types'
 
 import { makeColors } from './make-colors.js'
 import { PALETTES, type Mode, type PaletteName } from './palette'
@@ -51,37 +51,15 @@ export const baseLook = (prefs: Prefs): ThemeSetArgs => ({
   ...(prefs.wall === 'sky' ? { backdrop: { scene: sceneId(prefs.palette), glass: { blur: 20 } } } : {}),
 })
 
-/**
- * A cue redone as the wall's click, for listening from the pane. A click plays
- * one note of each layer, picked by where the wall is clicked (left to right),
- * and takes no `step`: so the notes keep their own sound and pitch, and the
- * person clicks from left to right to hear them in turn.
- */
-export const asClick = (cue: ThemeCue): ThemeCue => ({
-  ...cue,
-  layers: cue.layers.map(layer => {
-    if (!('step' in layer)) {
-      return layer
-    }
-    const { step: _step, ...rest } = layer
-    return rest
-  }),
+/** The sound with only the cues the person kept; the ambience stays (the app's speaker turns it off). */
+export const soundFor = (prefs: Prefs): ThemeSound => ({
+  ...SOUND,
+  cues: Object.fromEntries(CUES.filter(c => prefs.cues[c]).map(c => [c, SOUND.cues?.[c]])),
 })
 
-/**
- * The sound with only the cues the person kept; the ambience stays (the app's
- * speaker turns it off). While a cue is being listened to, the wall's click
- * plays it.
- */
-export const soundFor = (prefs: Prefs, listening: CueName | null = null): ThemeSound => {
-  const kept = Object.fromEntries(CUES.filter(c => prefs.cues[c]).map(c => [c, SOUND.cues?.[c]]))
-  const heard = listening === null ? undefined : SOUND.cues?.[listening]
-  return { ...SOUND, cues: heard === undefined ? kept : { ...kept, click: asClick(heard) } }
-}
-
 /** The whole look the person picked. */
-export const lookFor = (prefs: Prefs, listening: CueName | null = null): ThemeSetArgs => ({
+export const lookFor = (prefs: Prefs): ThemeSetArgs => ({
   ...baseLook(prefs),
   ...(prefs.style ? { style: STYLE } : {}),
-  sound: soundFor(prefs, listening),
+  sound: soundFor(prefs),
 })
