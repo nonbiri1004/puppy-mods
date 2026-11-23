@@ -20,6 +20,7 @@ export type Prefs = {
 declare module 'claude-code' {
   interface PluginState {
     // listening: the cue the wall's click plays for now, from the pane; null when none
-    'puppy-theme': { prefs: Prefs; listening: CueName | null }
+    // heard: wall clicks the app reported while listening
+    'puppy-theme': { prefs: Prefs; listening: CueName | null; heard: number }
   }
 }

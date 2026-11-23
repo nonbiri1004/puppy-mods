@@ -14,6 +14,8 @@ const PANE = 'look'
 const prefsAtom = atom({ plugin: 'puppy-theme', key: 'prefs' } as const, DEFAULT_PREFS)
 // The cue the wall's click plays for now, from the pane's ▶; this session only.
 const listeningAtom = atom({ plugin: 'puppy-theme', key: 'listening' } as const, null as CueName | null)
+// Wall clicks the app reported while listening, so the pane can say they arrive.
+const heardAtom = atom({ plugin: 'puppy-theme', key: 'heard' } as const, 0)
 
 // How long a borrowed click lasts before the wall's own click comes back.
 export const LISTEN_MS = 60_000
@@ -69,6 +71,7 @@ const listen = async ($: EngineInterface, cue: CueName | null): Promise<void> =>
   backSoon?.cancel()
   backSoon = undefined
   await update($, listeningAtom, () => cue)
+  await update($, heardAtom, () => 0)
   await wear($, parsePrefs(await read($, prefsAtom)))
   if (cue !== null) {
     backSoon = $.clock.after(LISTEN_MS, () => void listen($, null))
@@ -94,6 +97,7 @@ export const register: Register = on => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const prefs = parsePrefs(await read($, prefsAtom))
     const listening = (await read($, listeningAtom)) ?? null
+    const heard = (await read($, heardAtom)) ?? 0
     const drawsHere = e.surface === 'desktop' || e.surface === 'mobile'
 
     const choice = (key: string, isOn: boolean, label: string, onPress: () => Promise<void>) => (
@@ -169,6 +173,7 @@ export const register: Register = on => {
                 {isStepped(listening)
                   ? `to hear ${listening}: left to right, one note each`
                   : `to hear ${listening}`}
+                {heard > 0 ? ` · ${heard} heard` : ''}
               </Text>
             </Box>
           ) : null}
@@ -187,12 +192,20 @@ export const register: Register = on => {
     )
   })
 
+  // The app tells the mod of a click on the bare wall; count it while listening.
+  on('ui.pointer', async ($, e, next) => {
+    if ((await read($, listeningAtom)) != null) {
+      await update($, heardAtom, n => (n ?? 0) + 1)
+    }
+    return next(e)
+  })
+
   on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
     const name = paletteOfScene(e.props.scene)
     if ((e.surface !== 'desktop' && e.surface !== 'mobile') || name === undefined) {
       return next(e)
     }
     const { Svg } = $.ui.resolve(e)
-    return <Svg source={sceneFor(name)} alt="a small framed night sky on the wall" isInteractive />
+    return <Svg source={sceneFor(name)} alt="a small framed night sky on the wall" />
   })
 }
