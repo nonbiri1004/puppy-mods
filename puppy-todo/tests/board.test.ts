@@ -78,6 +78,9 @@ test('due: a bare date lasts to its end; the words name the day', () => {
   expect(dueOf('2026-11-30', day('2026-11-23'))).toEqual({ text: '到 11/30', isPast: false })
   expect(dueOf('2026-11-23', day('2026-11-23') + 3_600_000)).toEqual({ text: '到 11/23', isPast: false })
   expect(dueOf('2026-11-22', day('2026-11-23') + 1).isPast).toBe(true)
+  // what dispatch.py writes: the day's end with the offset
+  expect(dueOf('2026-11-25T23:59:00+08:00', Date.parse('2026-11-25T23:00:00+08:00')).isPast).toBe(false)
+  expect(dueOf('2026-11-25T23:59:00+08:00', Date.parse('2026-11-26T00:00:00+08:00')).isPast).toBe(true)
 })
 
 test('the tag is the folder\'s own name', () => {

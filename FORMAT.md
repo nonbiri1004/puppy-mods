@@ -32,7 +32,7 @@ a mod never runs a writer and never writes into the folder. an item leaves a car
   "waiting": [{ "id": "listen-7", "text": "hear song 7", "since": "2026-10-24T21:10:00+08:00",
                 "actions": [{ "label": "play", "open": "/Volumes/music/05_autumn/007.wav" }] },
               { "id": "merge-98", "text": "merge projects-map#98", "since": "2026-10-23T09:00:00+08:00",
-                "url": "https://github.com/nonbiri1004/projects-map/pull/98", "due": "2026-10-30" }],
+                "url": "https://github.com/nonbiri1004/projects-map/pull/98", "due": "2026-10-30T23:59:00+08:00" }],
   "last_output": { "label": "song 88 ok", "at": "2026-10-24T22:38:12+08:00" },
   "next": "keep making songs",
   "detail": {}
@@ -67,7 +67,7 @@ a mod never runs a writer and never writes into the folder. an item leaves a car
 | `since` | no | iso 8601 time, when it began to wait; a reader shows how long. never a time in the future: a date the thing is due goes in `due` |
 | `group` | no | the `id` of one of `waiting_groups`, below |
 | `url` | no | one `https://` link to look at, at most 2048 characters (a pull request, an issue, a page). a reader draws it as a link, e.g. `↗ #98` for a GitHub pull request or issue. any other scheme is left out |
-| `due` | no | when it should be done by: a date `YYYY-MM-DD`, or an iso 8601 time. a reader shows it, and may mark it once it has passed |
+| `due` | no | when it should be done by: an iso 8601 time with the offset. a deadline that names only a day is that day's end, `23:59` (`2026-11-30T23:59:00+08:00`). a writer may leave a passed `due` out. a reader shows the day (`到 11/30`), may mark it once it has passed, and also accepts a bare date `YYYY-MM-DD` (read as the end of that day) |
 | `actions` | no | buttons, below. a read-only reader (puppy-todo) leaves them out |
 
 new in version 1: `url` and `due`. older files and older mods simply leave them out.
