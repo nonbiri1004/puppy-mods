@@ -14,9 +14,9 @@
       "description": "your own to-do list in a quiet pane: add, tick, delete. nothing else writes to it"
     },
     {
-      "name": "puppy-console",
-      "source": "./puppy-console",
-      "description": "a pane with what waits for you first, then one short card per production pipeline, read from small status files"
+      "name": "puppy-sessions",
+      "source": "./puppy-sessions",
+      "description": "your claude conversations in a pane: the ones that wait for you to answer, one row for each of the others, your rate limits, and the finished ones you may archive"
     },
     {
       "name": "puppy-skills",

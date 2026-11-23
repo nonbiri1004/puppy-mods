@@ -1,0 +1,52 @@
+{
+  "name": "puppy-sessions",
+  "version": "0.13.0",
+  "description": "a pane with your claude conversations: the ones that wait for you to answer, one row for each of the others, your rate limits, and the finished ones you may archive",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "lofi puppy",
+    "url": "https://github.com/nonbiri1004"
+  },
+  "homepage": "https://github.com/nonbiri1004/puppy-mods/tree/main/puppy-sessions",
+  "repository": "https://github.com/nonbiri1004/puppy-mods",
+  "license": "MIT",
+  "keywords": [
+    "sessions",
+    "conversations",
+    "usage",
+    "puppy",
+    "lofi"
+  ],
+  "userConfig": {
+    "notify": {
+      "type": "string",
+      "title": "Notices",
+      "description": "on shows a short notice, while the sessions pane is open, when another conversation starts waiting for you; off shows none.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "conversations": {
+      "type": "string",
+      "title": "Conversations",
+      "description": "on: each conversation writes a short file about itself into ~/.claude/puppy-sessions/ (this computer only) after every turn and while a question card waits, and the pane lists them. off: it writes nothing and the pane lists none.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "push": {
+      "type": "string",
+      "title": "Push",
+      "description": "on: when a conversation stops to ask you something, send a push through the app's PushNotification tool, if your permission settings already allow it (no dialog is opened). side chats never push. off: none.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    }
+  }
+}
