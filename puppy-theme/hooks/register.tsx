@@ -6,6 +6,8 @@ import { baseLook, colorsFor, lookFor, unpainted } from './look'
 import { PALETTES, type PaletteName } from './palette'
 import { CUES, DEFAULT_PREFS, parsePrefs, STORE_KEY, WALLS } from './prefs'
 import { paletteOfScene, sceneFor } from './scene'
+import { SOUND } from './sound'
+import { clipOf } from './synth'
 
 const PANE = 'look'
 
@@ -51,6 +53,20 @@ const pick = async ($: EngineInterface, change: (p: Prefs) => Prefs): Promise<vo
   await wear($, now)
 }
 
+// ▶ in the pane: the app can't be asked to play a cue, so play a copy made
+// from the same numbers. A failed play says so in one line, never a toast.
+const listen = async ($: EngineInterface, cue: CueName): Promise<void> => {
+  const def = SOUND.cues?.[cue]
+  if (def === undefined) {
+    return
+  }
+  try {
+    await $.audio.play(clipOf(def))
+  } catch (error) {
+    $.ui.log(`puppy-theme: could not play ${cue} (${String(error)})`)
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'look', description: "pick the puppy's palette, wall, message style and sounds" })
@@ -73,7 +89,14 @@ export const register: Register = on => {
     const choice = (key: string, isOn: boolean, label: string, onPress: () => Promise<void>) => (
       <Button key={key} label={`${isOn ? '●' : '○'} ${label}`} plain dimColor={!isOn} onPress={onPress} />
     )
-    const toggle = (key: string, isOn: boolean, label: string, note: string, onPress: () => Promise<void>) => (
+    const toggle = (
+      key: string,
+      isOn: boolean,
+      label: string,
+      note: string,
+      onPress: () => Promise<void>,
+      onPlay?: () => Promise<void>,
+    ) => (
       <Box key={`row-${key}`} flexDirection="row" gap={1}>
         <Box width={3} flexShrink={0}>
           <Button key={key} label={isOn ? '☑' : '☐'} plain dimColor onPress={onPress} />
@@ -83,8 +106,9 @@ export const register: Register = on => {
             {label}
           </Text>
         </Box>
-        <Box flexShrink={0}>
+        <Box flexShrink={0} flexDirection="row" gap={1}>
           <Text dimColor>{note}</Text>
+          {onPlay === undefined ? null : <Button key={`play-${key}`} label="▶" plain dimColor onPress={onPlay} />}
         </Box>
       </Box>
     )
@@ -125,10 +149,15 @@ export const register: Register = on => {
             <Text weight="semibold">sounds</Text>
             <Text dimColor>{`${cuesOn} of ${CUES.length}`}</Text>
           </Box>
-          <Text dimColor>play once the speaker in the title bar is on</Text>
+          <Text dimColor>play once the speaker in the title bar is on · ▶ is a close copy</Text>
           {CUES.map(c =>
-            toggle(`cue-${c}`, prefs.cues[c], c, CUE_LABEL[c], () =>
-              pick($, p => ({ ...p, cues: { ...p.cues, [c]: !p.cues[c] } })),
+            toggle(
+              `cue-${c}`,
+              prefs.cues[c],
+              c,
+              CUE_LABEL[c],
+              () => pick($, p => ({ ...p, cues: { ...p.cues, [c]: !p.cues[c] } })),
+              () => listen($, c),
             ),
           )}
         </Box>
