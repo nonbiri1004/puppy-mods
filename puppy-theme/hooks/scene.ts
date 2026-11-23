@@ -4,7 +4,13 @@
 // "夜空小螢幕" night #151412 → #23211e, nebula #443c35 / #313840, warm white
 // stars). Pixel art, crisp edges, slow twinkles, nothing flashes.
 
-export const SCENE_ID = 'framed-night'
+import { PALETTES, type PaletteName } from './palette'
+
+export const sceneId = (name: PaletteName): string => `framed-night-${name}`
+
+/** The palette a scene id names, if it is one of ours. */
+export const paletteOfScene = (id: unknown): PaletteName | undefined =>
+  (Object.keys(PALETTES) as PaletteName[]).find(name => sceneId(name) === id)
 
 // Frame placement inside the 1200×800 view, anchored top right.
 const F = { x: 948, y: 56, w: 200, h: 130 }
@@ -75,18 +81,20 @@ const sky = (): string => {
   ].join('')
 }
 
-export const SCENE = [
+export const sceneFor = (name: PaletteName): string => {
+  const { light: l, dark: d } = PALETTES[name]
+  return [
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMaxYMin meet" shape-rendering="crispEdges">`,
   `<defs><linearGradient id="night" x1="0" y1="0" x2="0" y2="1">`,
   `<stop offset="0" stop-color="#151412"/><stop offset="1" stop-color="#23211e"/>`,
   `</linearGradient></defs>`,
   `<style>`,
-  `.wall{fill:#eeede9}`,
-  `.frame{fill:#cdcac3}.frame-in{fill:#dcdad4}.shade{fill:#2a2926;opacity:.08}`,
-  `.cord{stroke:#b5b1a9}.nail{fill:#8f8b84}`,
+  `.wall{fill:${l.wall}}`,
+  `.frame{fill:${l.edge}}.frame-in{fill:${l.line}}.shade{fill:${l.text};opacity:.08}`,
+  `.cord{stroke:${l.edge}}.nail{fill:${l.muted}}`,
   `@media (prefers-color-scheme: dark){`,
-  `.wall{fill:#191917}.frame{fill:#45433f}.frame-in{fill:#353431}.shade{fill:#000;opacity:.25}`,
-  `.cord{stroke:#45433f}.nail{fill:#5b5954}}`,
+  `.wall{fill:${d.wall}}.frame{fill:${d.edge}}.frame-in{fill:${d.line}}.shade{fill:#000;opacity:.25}`,
+  `.cord{stroke:${d.edge}}.nail{fill:${d.muted}}}`,
   `.stars{fill:#efe8da}`,
   `.s{opacity:.85;animation:tw 7s ease-in-out infinite}`,
   `.s1{animation-duration:9s}.s2{animation-duration:11s}`,
@@ -97,4 +105,5 @@ export const SCENE = [
   `<rect class="wall" x="-20000" y="-20000" width="40000" height="40000"/>`,
   sky(),
   `</svg>`,
-].join('')
+  ].join('')
+}

@@ -1,60 +1,56 @@
-import type { ThemeSetArgs } from 'claude-code'
+import type { ThemeColors, ThemeSetArgs } from 'claude-code'
 
 import { makeColors } from './make-colors.js'
-import { SCENE_ID } from './scene'
+import { PALETTES, type Mode, type PaletteName } from './palette'
+import { sceneId } from './scene'
+import { SOUND } from './sound'
+import { STYLE, messageColors } from './style'
 
-// The lofi puppy's warm greys (baibai-brand docs, "網站：白白的宇宙"):
-// paper grey by day, warm charcoal by night. No orange: in the brand, orange
-// belongs to the puppy's headphones, and coding tools draw none.
-export const PAGE = {
-  light: { wall: '#eeede9', card: '#f8f7f4', line: '#dcdad4', edge: '#cdcac3', text: '#2a2926', muted: '#6d6a64' },
-  dark: { wall: '#191917', card: '#232321', line: '#353431', edge: '#45433f', text: '#e7e5e0', muted: '#9b9891' },
-} as const
-
-// Seeds only: the design system keeps the hue and sets the lightness.
-// The accent is the grey-blue of the framed night sky's nebula, tuned up.
-export const ROLES = {
-  accent: '#5a6e86',
-  danger: '#b4483c',
-  success: '#5b7f4a',
-  warning: '#a87a1e',
-  pro: '#7a6290',
-} as const
-
-export const { theme, problems } = makeColors({
-  label: 'lofi puppy',
-  roles: ROLES,
-  light: {
-    gray: {
-      anchors: {
-        'surface-0': PAGE.light.wall,
-        'surface-1': PAGE.light.card,
-        'surface-2': '#fcfbf9',
-        'text-primary': PAGE.light.text,
-        'text-secondary': '#4b4944',
-        'text-muted': PAGE.light.muted,
-      },
-    },
-  },
-  dark: {
-    gray: {
-      anchors: {
-        'surface-0': PAGE.dark.wall,
-        'surface-1': PAGE.dark.card,
-        'surface-2': '#292826',
-        'surface-3': '#2e2d2a',
-        'text-primary': PAGE.dark.text,
-        'text-secondary': '#c6c3bc',
-        'text-muted': PAGE.dark.muted,
-      },
-    },
-  },
+const anchors = (m: Mode) => ({
+  'surface-0': m.wall,
+  'surface-1': m.card,
+  'surface-2': m.surface2,
+  ...(m.surface3 === undefined ? {} : { 'surface-3': m.surface3 }),
+  'text-primary': m.text,
+  'text-secondary': m.secondary,
+  'text-muted': m.muted,
 })
 
-/** The line that would stop Desktop painting the colors, if any. */
-export const unpainted = (): string | undefined => problems.find(line => line.startsWith("Desktop won't paint"))
-
-export const LOOK: ThemeSetArgs = {
-  colors: theme,
-  backdrop: { scene: SCENE_ID, glass: { blur: 20 } },
+/** The design-system colors for a palette, and its contrast notes. */
+export const colorsFor = (name: PaletteName): { colors: ThemeColors; problems: string[] } => {
+  const p = PALETTES[name]
+  const { theme, problems } = makeColors({
+    label: p.label,
+    roles: p.roles,
+    light: { gray: { anchors: anchors(p.light) } },
+    dark: { gray: { anchors: anchors(p.dark) } },
+  })
+  // The four message colors go in after makeColors, which doesn't take them.
+  const extra = messageColors(p)
+  const colors: ThemeColors = {
+    ...theme,
+    inputs: {
+      ...theme.inputs,
+      light: { ...theme.inputs?.light, ...extra.light },
+      dark: { ...theme.inputs?.dark, ...extra.dark },
+    },
+  }
+  return { colors, problems }
 }
+
+/** The line that would stop Desktop painting the colors, if any. */
+export const unpainted = (problems: readonly string[]): string | undefined =>
+  problems.find(line => line.startsWith("Desktop won't paint"))
+
+/** The parts every build takes: colors and the backdrop. */
+export const baseLook = (name: PaletteName): ThemeSetArgs => ({
+  colors: colorsFor(name).colors,
+  backdrop: { scene: sceneId(name), glass: { blur: 20 } },
+})
+
+/** The whole look, with the message style and the sound. */
+export const fullLook = (name: PaletteName): ThemeSetArgs => ({
+  ...baseLook(name),
+  style: STYLE,
+  sound: SOUND,
+})
