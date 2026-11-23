@@ -46,16 +46,20 @@ export const WARM: Palette = {
   roles: { accent: '#5a6e86', danger: '#b4483c', success: '#5b7f4a', warning: '#a87a1e', pro: '#7a6290' },
 }
 
-// Retro warm, after the open Gruvbox palette (MIT, morhetz/gruvbox): cream
-// paper by day, brown-black by night, earthy roles, its orange as the accent.
+// The editor theme Gruvbox Hard (jdinhlife/vscode-theme-gruvbox, MIT, after
+// morhetz/gruvbox): its Light Hard colors by day and Dark Hard by night, taken
+// from the theme files themselves (the person asked for that, 2026-11-23).
+// Like the editor theme, every surface is the one bg0_h color and thin bg1
+// lines do the separating. Gruvbox's orange is the accent.
 export const GRUVBOX: Palette = {
-  label: 'lofi puppy · gruvbox',
+  label: 'lofi puppy · gruvbox hard',
   light: {
-    wall: '#f2e5bc', card: '#fbf1c7', surface2: '#f9f5d7',
-    line: '#d5c4a1', edge: '#bdae93', text: '#3c3836', secondary: '#504945', muted: '#7c6f64',
+    // editor/sideBar/panel .background, sideBar.border, foreground, sideBar.foreground, tab.inactiveForeground
+    wall: '#f9f5d7', card: '#f9f5d7', surface2: '#f9f5d7',
+    line: '#ebdbb2', edge: '#d5c4a1', text: '#3c3836', secondary: '#504945', muted: '#7c6f64',
   },
   dark: {
-    wall: '#1d2021', card: '#282828', surface2: '#32302f', surface3: '#3c3836',
+    wall: '#1d2021', card: '#1d2021', surface2: '#1d2021',
     line: '#3c3836', edge: '#504945', text: '#ebdbb2', secondary: '#d5c4a1', muted: '#a89984',
   },
   roles: { accent: '#d65d0e', danger: '#cc241d', success: '#98971a', warning: '#d79921', pro: '#b16286' },

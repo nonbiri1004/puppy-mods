@@ -7,7 +7,7 @@ look                                         kept on this computer
 ╭─────────────────────────────────────────────╮
 │ palette                          warm grey  │
 │ ● warm grey                                 │
-│ ○ gruvbox                                   │
+│ ○ gruvbox hard                              │
 ╰─────────────────────────────────────────────╯
 ╭─────────────────────────────────────────────╮
 │ wall                       night sky frame  │
@@ -43,9 +43,10 @@ then open the desktop app's code tab: the look draws there.
 ## what you do
 
 - **open the settings**: `/look`. every pick is worn at once and kept on this computer, for every session.
-- **palette**: warm grey (the lofi puppy's own paper and charcoal greys) or gruvbox (retro cream and brown-black, after the open [gruvbox](https://github.com/morhetz/gruvbox) palette, its orange included). both follow light and dark mode.
+- **palette**: warm grey (the lofi puppy's own paper and charcoal greys) or gruvbox hard (retro cream and brown-black, the "hard" contrast of the open [gruvbox](https://github.com/morhetz/gruvbox) palette, its orange included). both follow light and dark mode.
 - **wall**: a small framed night sky in the top right corner, with slow twinkling pixel stars, or the plain wall color.
 - **messages**: your messages as small pixel cards, a little more room between lines, quiet code-font tool rows. off keeps the app's own rows.
+- **look on or off**: off shows the app as it comes, and keeps your picks for when you turn it back on. **back to the puppy's defaults** resets every pick.
 - **sounds**: pick one of four sets, and turn each of the seven moments on or off. the sounds play only once you press the speaker in the session's title bar.
 
 ## the seven sounds
@@ -68,6 +69,7 @@ every set also has a quiet background (a hum, a fan, rain); the speaker's own me
 
 - the terminal and editors draw no theme. `/look` still opens there, and what you pick counts in the desktop app.
 - permission prompts, questions, code blocks and the message box keep the app's own look.
+- with the message style on, claude's reply text keeps the app's own color (a slightly greyer white than the palette's text). turn messages off to give it the palette's color.
 - your accessibility settings win over the message style (a bigger font, more contrast).
 - it reads nothing of yours and sends nothing anywhere. the picks are one small entry in the mod's own store.
 

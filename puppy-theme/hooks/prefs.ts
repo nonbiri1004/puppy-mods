@@ -13,6 +13,7 @@ export const WALLS: readonly Wall[] = ['sky', 'plain']
 export const SOUND_SETS: readonly SoundSet[] = ['lofi', 'wood', 'rain', 'chip']
 
 export const DEFAULT_PREFS: Prefs = {
+  on: true,
   palette: 'warm',
   wall: 'sky',
   style: true,
@@ -32,6 +33,7 @@ export const parsePrefs = (raw: unknown): Prefs => {
   const o = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
   const cues = typeof o.cues === 'object' && o.cues !== null ? (o.cues as Record<string, unknown>) : {}
   return {
+    on: typeof o.on === 'boolean' ? o.on : DEFAULT_PREFS.on,
     palette: isPalette(o.palette) ? o.palette : DEFAULT_PREFS.palette,
     wall: isWall(o.wall) ? o.wall : DEFAULT_PREFS.wall,
     style: typeof o.style === 'boolean' ? o.style : DEFAULT_PREFS.style,

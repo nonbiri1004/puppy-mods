@@ -12,6 +12,8 @@ export type SoundSet = 'lofi' | 'wood' | 'rain' | 'chip'
 
 // what the person picked in the /look pane; kept in $.store under 'prefs'
 export type Prefs = {
+  // false: the app's own look, the picks below kept for later
+  on: boolean
   palette: PaletteName
   wall: Wall
   // the message style (pixel cards, airier text, quiet tool rows); off keeps the app's own rows

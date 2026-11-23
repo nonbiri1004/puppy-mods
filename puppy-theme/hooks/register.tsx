@@ -25,9 +25,13 @@ const CUE_LABEL: Record<CueName, string> = {
 }
 const shortName = (name: PaletteName): string => PALETTES[name].label.replace('lofi puppy · ', '')
 
-// Sets the whole look; a build that refuses style or sound gets colors and
+// Sets the whole look (or, turned off, takes it away); a build that refuses style or sound gets colors and
 // the backdrop alone.
 const wear = async ($: EngineInterface, prefs: Prefs): Promise<void> => {
+  if (!prefs.on) {
+    await $.theme.clear()
+    return
+  }
   const problem = unpainted(colorsFor(prefs.palette).problems)
   if (problem !== undefined) {
     $.ui.log(`puppy-theme: ${problem}`)
@@ -96,6 +100,16 @@ export const register: Register = on => {
         <Text dimColor>
           {drawsHere ? 'kept on this computer, for every session' : 'the look draws in the desktop app; picks here count there'}
         </Text>
+        <Box key="card-reset" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
+          <Box flexDirection="row" justifyContent="space-between">
+            <Text weight="semibold">look</Text>
+            <Text dimColor>{prefs.on ? 'on' : "off · the app's own"}</Text>
+          </Box>
+          {toggle('on', prefs.on, 'wear the puppy look', 'off shows the app as it comes', () =>
+            pick($, p => ({ ...p, on: !p.on })),
+          )}
+          <Button key="reset" label="↺ back to the puppy's defaults" plain dimColor onPress={() => pick($, () => DEFAULT_PREFS)} />
+        </Box>
         <Box key="card-palette" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
           <Box flexDirection="row" justifyContent="space-between">
             <Text weight="semibold">palette</Text>

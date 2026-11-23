@@ -36,10 +36,15 @@ const engine = (on: Parameters<TestBody>[1], stored: unknown) => {
     logs.push(e)
     return { value: undefined }
   })
+  let clears = 0
+  on('theme.clear', () => {
+    clears += 1
+    return { value: { isDrawn: true as const, requestId: 'test' } }
+  })
   on('command.register', () => ({ value: { command: 'look' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  return { store, sets, logs }
+  return { store, sets, logs, clears: () => clears }
 }
 
 test('a session starts in what the pane kept', async ($, on) => {
@@ -114,3 +119,28 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.unmount()
   })
 }
+
+test('the look turns off to the app\'s own and back, and reset brings the defaults', async ($, on) => {
+  const { store, sets, clears } = engine(on, { palette: 'gruvbox', wall: 'plain', style: false, sounds: 'chip' })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ key: 'card-reset' })).toBeTruthy()
+
+  const before = sets.length
+  await ui.press({ key: 'on' })
+  expect(clears()).toBe(1)
+  expect(sets.length).toBe(before)
+  expect(store.get('prefs')).toMatchObject({ on: false, palette: 'gruvbox', sounds: 'chip' })
+
+  await ui.press({ key: 'reset' })
+  expect(store.get('prefs')).toMatchObject({ on: true, palette: 'warm', wall: 'sky', style: true, sounds: 'lofi' })
+  expect(sets.at(-1)?.backdrop).toMatchObject({ scene: sceneId('warm') })
+  await ui.unmount()
+})
+
+test('a session that kept the look off starts with no theme', async ($, on) => {
+  const { sets, clears } = engine(on, { on: false })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(sets).toHaveLength(0)
+  expect(clears()).toBe(1)
+})
