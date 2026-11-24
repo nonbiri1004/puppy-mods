@@ -178,6 +178,13 @@ test('a day sky gets a shade in dark mode only', () => {
   for (const p of ['dawn', 'dusk', 'night'] as const) expect(drawScene('baibai', p, 'clear')).not.toContain('class="day-shade"')
 })
 
+test('under a day sky the town is the muted grey in light mode and stays dark in dark mode', () => {
+  const day = drawScene('baibai', 'day', 'rain')
+  expect(day).toContain('class="town-day"')
+  expect(day).toMatch(new RegExp(`\\.town-day\\{fill:${BRAND.light.muted}\\}.*prefers-color-scheme: dark.*\\.town-day\\{fill:#15171a\\}`, 's'))
+  expect(drawScene('baibai', 'night', 'rain')).not.toContain('class="town-day"')
+})
+
 test('the look follows each pick', () => {
   const full = lookFor(DEFAULT_PREFS)
   expect(full.backdrop).toMatchObject({ scene: sceneName('baibai', 'night', 'clear'), glass: GLASS.clear })

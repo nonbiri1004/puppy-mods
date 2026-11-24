@@ -50,6 +50,7 @@ const WINDOW = '#e9e4da' // the brand's night-screen text white
 // In dark mode a day sky is the brightest thing on the screen; a shade over it
 // (hidden in light mode) turns it to an overcast day that sits with the charcoal.
 const DAY_SHADE = 0.4
+const TOWN = '#15171a'
 
 /** The scene names: one per palette, time of day and weather, so a change redraws (letters, digits and - only). */
 export const SCENE_ID = 'puppy-sky'
@@ -137,7 +138,7 @@ const meteor = (w: number) => ([x, y, dx, dy]: readonly [number, number, number,
   `</g>`
 
 // Rain: two stacked copies of the same streaks slide down one sky height, so it loops.
-const rain = (l: Layout): string => {
+const rain = (l: Layout, period: Period): string => {
   const streaks: string[] = []
   const step = l.w > 40 ? 9 : 5
   for (let x = 1, i = 0; x < l.w; x += step, i++) {
@@ -148,7 +149,11 @@ const rain = (l: Layout): string => {
     const x = Math.round(((i + 1) * l.w) / 4) - 1
     return rect(x, 4 + i * 6, 2, 2, RAIN, ` class="drop drop-${l.w}" style="animation-delay:-${i * 4.5}s"`)
   })
-  const town = rect(0, l.h - 8, l.w, 8, '#15171a') + rect(Math.round(l.w / 2), l.h - 12, Math.round(l.w / 3), 4, '#15171a')
+  // Under a day sky in light mode the near-black town was the heaviest spot on the
+  // screen; there it takes the brand's muted grey (the .town-day rules below).
+  const cls = period === 'day' ? ' class="town-day"' : ''
+  const town =
+    rect(0, l.h - 8, l.w, 8, TOWN, cls) + rect(Math.round(l.w / 2), l.h - 12, Math.round(l.w / 3), 4, TOWN, cls)
   const windows = [0.2, 0.55, 0.8].map(
     (f, i) => rect(Math.round(f * l.w), l.h - 6, 2, 2, WINDOW, ` class="win" style="animation-delay:-${i * 3.7}s"`),
   )
@@ -168,7 +173,7 @@ const sky = (l: Layout, period: Period, weather: Weather): string => {
     rect(0, 0, l.w, l.h, `url(#${id})`),
   ]
   if (weather === 'rain') {
-    parts.push(rain(l))
+    parts.push(rain(l, period))
   } else if (period === 'day') {
     parts.push(`<g class="cloud" fill="${CLOUD}" opacity=".7">${l.clouds.map(([x, y, w]) => rect(x, y, w, 2) + rect(x + 2, y - 2, w - 4, 2)).join('')}</g>`)
   }
@@ -193,10 +198,10 @@ export const drawScene = (palette: PaletteName = 'baibai', period: Period = 'nig
     `<style>`,
     `.wall{fill:${l.wall}}`,
     `.frame{fill:${l.edge}}.frame-in{fill:${l.line}}.shade{fill:${l.text};opacity:.08}`,
-    `.cord{stroke:${l.edge}}.nail{fill:${l.muted}}.day-shade{opacity:0}`,
+    `.cord{stroke:${l.edge}}.nail{fill:${l.muted}}.day-shade{opacity:0}.town-day{fill:${l.muted}}`,
     `@media (prefers-color-scheme: dark){`,
     `.wall{fill:${d.wall}}.frame{fill:${d.edge}}.frame-in{fill:${d.line}}.shade{fill:#000;opacity:.25}`,
-    `.cord{stroke:${d.edge}}.nail{fill:${d.muted}}.day-shade{opacity:${DAY_SHADE}}}`,
+    `.cord{stroke:${d.edge}}.nail{fill:${d.muted}}.day-shade{opacity:${DAY_SHADE}}.town-day{fill:${TOWN}}}`,
     `.slim,.wide{display:none}`,
     `@media (min-width: 1364px) and (max-width: 1619px) and (min-height: 320px){.slim{display:inline}}`,
     `@media (min-width: 1620px) and (min-height: 320px){.wide{display:inline}}`,
