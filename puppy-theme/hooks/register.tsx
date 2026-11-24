@@ -15,7 +15,7 @@ const prefsAtom = atom({ plugin: 'puppy-theme', key: 'prefs' } as const, DEFAULT
 
 const PALETTE_LABEL: Record<PaletteName, string> = { baibai: 'baibai · the brand greys', eyecare: 'eye care · softer text' }
 const WALL_LABEL: Record<Wall, string> = { sky: 'framed sky', plain: 'plain wall' }
-const GLASS_LABEL = { true: 'frosted · a faint blur and a thin veil', false: 'clear · the sky as it is' } as const
+const GLASS_LABEL = { true: 'frosted · the frame a little soft', false: 'clear · the sky as it is' } as const
 const MESSAGE_LABEL: Record<MessageStyle, string> = {
   pixel: 'pixel card with a tail',
   tape: 'taped paper notes',

@@ -157,6 +157,23 @@ test('the sky follows the hour and the rain sounds', () => {
   expect(readSceneName('puppy-sky-gruvbox-night-clear')).toBeUndefined()
 })
 
+test('the glass never tints the panels, so the brand colors stay exact', () => {
+  for (const g of Object.values(GLASS)) expect(g.tint).toBe('rgba(0,0,0,0)')
+  expect(GLASS.frosted.blur).toBeGreaterThan(0)
+  expect(GLASS.frosted.blur).toBeLessThanOrEqual(2)
+  expect(GLASS.clear.blur).toBe(0)
+})
+
+test('a day sky gets a shade in dark mode only', () => {
+  for (const w of ['clear', 'rain'] as const) {
+    const day = drawScene('baibai', 'day', w)
+    expect(day).toContain('class="day-shade"')
+    // hidden by default, shown inside the dark-mode rule
+    expect(day).toMatch(/\.day-shade\{opacity:0\}.*prefers-color-scheme: dark.*\.day-shade\{opacity:0\.4\}/s)
+  }
+  for (const p of ['dawn', 'dusk', 'night'] as const) expect(drawScene('baibai', p, 'clear')).not.toContain('class="day-shade"')
+})
+
 test('the look follows each pick', () => {
   const full = lookFor(DEFAULT_PREFS)
   expect(full.backdrop).toMatchObject({ scene: sceneName('baibai', 'night', 'clear'), glass: GLASS.clear })

@@ -47,6 +47,9 @@ const PLANET = { body: '#5d5750', lit: '#77706a' }
 const CLOUD = '#e8e6e1'
 const RAIN = '#b4bac1'
 const WINDOW = '#e9e4da' // the brand's night-screen text white
+// In dark mode a day sky is the brightest thing on the screen; a shade over it
+// (hidden in light mode) turns it to an overcast day that sits with the charcoal.
+const DAY_SHADE = 0.4
 
 /** The scene names: one per palette, time of day and weather, so a change redraws (letters, digits and - only). */
 export const SCENE_ID = 'puppy-sky'
@@ -168,7 +171,10 @@ const sky = (l: Layout, period: Period, weather: Weather): string => {
     parts.push(rain(l))
   } else if (period === 'day') {
     parts.push(`<g class="cloud" fill="${CLOUD}" opacity=".7">${l.clouds.map(([x, y, w]) => rect(x, y, w, 2) + rect(x + 2, y - 2, w - 4, 2)).join('')}</g>`)
-  } else {
+  }
+  if (period === 'day') {
+    parts.push(rect(0, 0, l.w, l.h, '#000', ' class="day-shade"'))
+  } else if (weather === 'clear') {
     const shown = period === 'night' ? l.stars : period === 'dusk' ? l.stars.slice(0, 4) : l.stars.slice(0, 2)
     if (period !== 'dawn') parts.push(`<g class="neb" opacity="${period === 'night' ? 0.9 : 0.5}">${l.nebula}</g>`)
     parts.push(planet(l.planet))
@@ -187,10 +193,10 @@ export const drawScene = (palette: PaletteName = 'baibai', period: Period = 'nig
     `<style>`,
     `.wall{fill:${l.wall}}`,
     `.frame{fill:${l.edge}}.frame-in{fill:${l.line}}.shade{fill:${l.text};opacity:.08}`,
-    `.cord{stroke:${l.edge}}.nail{fill:${l.muted}}`,
+    `.cord{stroke:${l.edge}}.nail{fill:${l.muted}}.day-shade{opacity:0}`,
     `@media (prefers-color-scheme: dark){`,
     `.wall{fill:${d.wall}}.frame{fill:${d.edge}}.frame-in{fill:${d.line}}.shade{fill:#000;opacity:.25}`,
-    `.cord{stroke:${d.edge}}.nail{fill:${d.muted}}}`,
+    `.cord{stroke:${d.edge}}.nail{fill:${d.muted}}.day-shade{opacity:${DAY_SHADE}}}`,
     `.slim,.wide{display:none}`,
     `@media (min-width: 1364px) and (max-width: 1619px) and (min-height: 320px){.slim{display:inline}}`,
     `@media (min-width: 1620px) and (min-height: 320px){.wide{display:inline}}`,

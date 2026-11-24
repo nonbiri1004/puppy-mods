@@ -46,14 +46,16 @@ export const lookColors = (name: PaletteName): { colors: ThemeColors; problems: 
 export const unpainted = (problems: readonly string[]): string | undefined =>
   problems.find(line => line.startsWith("Desktop won't paint"))
 
-// How the panels sit over the framed sky. Frosted: a thin veil and a whisper of
-// blur, so the frame stays a picture (it is only 24 points wide; a blur of 8
-// smeared it into a grey smudge) and words that cross it stay easy to read.
-// Clear: almost no veil, the sky at its brightest. (The app's own 16-point blur
-// and 0.6 veil hide the sky under the panels.)
+// How the panels sit over the framed sky. The veil is see-through in both
+// picks: a tint can't follow light and dark mode (it takes one raw color), so
+// any tint shifts the brand's wall in one of them; with none, the panels keep
+// the brand's colors exactly. Frosted only softens the frame a little, as if
+// behind glass (a blur of 8 smeared the 24-point frame into a smudge); clear
+// shows it sharp. (The app's own 16-point blur and 0.6 veil hide the sky.)
+export const VEIL = 'rgba(0,0,0,0)'
 export const GLASS = {
-  frosted: { blur: 2, opacity: 0.25 },
-  clear: { blur: 0, opacity: 0.05 },
+  frosted: { blur: 2, tint: VEIL, opacity: 1 },
+  clear: { blur: 0, tint: VEIL, opacity: 1 },
 } as const
 
 /**
