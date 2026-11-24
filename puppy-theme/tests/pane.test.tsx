@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 import type { ThemeSetArgs } from 'claude-code'
 
@@ -154,4 +154,38 @@ test('a session that kept the look off starts with no theme', async ($, on) => {
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   expect(sets).toHaveLength(0)
   expect(clears()).toBe(1)
+})
+
+test('an open session takes picks another session stored, and the sky follows the hour', async ($, on) => {
+  const clock = mock.clock(on, { now: new Date(2026, 10, 24, 16, 59, 50).getTime() })
+  const store = new Map<string, unknown>()
+  const sets: ThemeSetArgs[] = []
+  on('store.get', (_, e) => ({ value: store.get(e.key) }))
+  on('store.set', (_, e) => {
+    store.set(e.key, e.value)
+    return { value: undefined }
+  })
+  on('theme.set', (_, e) => {
+    sets.push(e)
+    return { value: { isDrawn: true as const, requestId: 'test' } }
+  })
+  on('command.register', () => ({ value: { command: 'look' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(sets).toHaveLength(1)
+  expect(sets[0]?.backdrop).toMatchObject({ scene: 'puppy-sky-baibai-day-clear' })
+
+  // nothing changed: no new look
+  await clock.advance(5_000)
+  expect(sets).toHaveLength(1)
+
+  // another session's /look stores the bookmark style
+  store.set('prefs', { messages: 'bookmark' })
+  await clock.advance(5_000)
+  expect(sets).toHaveLength(2)
+  expect(sets[1]?.style?.UserMessage).toMatchObject({ paddingY: 12 })
+
+  // 17:00 is dusk
+  await clock.advance(5_000)
+  expect(sets.at(-1)?.backdrop).toMatchObject({ scene: 'puppy-sky-baibai-dusk-clear' })
 })

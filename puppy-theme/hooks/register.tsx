@@ -59,16 +59,21 @@ const wear = async ($: EngineInterface, prefs: Prefs, known?: number): Promise<v
   }
 }
 
+// The picks this session last wore, as stored: the watch below compares against it.
+let seen = ''
+
 // One change from the pane: keep it, then wear it.
 const pick = async ($: EngineInterface, change: (p: Prefs) => Prefs): Promise<void> => {
   await update($, prefsAtom, was => change(parsePrefs(was)))
   const now = parsePrefs(await read($, prefsAtom))
+  seen = JSON.stringify(now)
   await $.store.set(STORE_KEY, now)
   await wear($, now)
 }
 
-// The time-of-day check; a reload starts a new one.
-let sky: { cancel: () => void } | undefined
+// The watch: picks made in another session and the time of day; a reload starts a new one.
+let watch: { cancel: () => void } | undefined
+const WATCH_MS = 5_000
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -83,17 +88,24 @@ export const register: Register = on => {
       $.command.register({ name: 'look', description: "pick the puppy's colors, wall, glass, messages and sounds" }),
       update($, prefsAtom, () => prefs),
     ])
-    // The sky follows the time of day: look once a minute, and wear the look
-    // again only when the hour crosses into dawn, day, dusk or night.
-    sky?.cancel()
+    // Every few seconds: if another session's /look stored new picks, take them
+    // (each session wears its own look, and the store has no change event); and
+    // if the hour crossed into dawn, day, dusk or night, wear the sky again.
+    watch?.cancel()
+    seen = JSON.stringify(prefs)
     let period = periodOf(hour)
-    sky = $.clock.every(60_000, () => {
+    watch = $.clock.every(WATCH_MS, () => {
       void (async () => {
-        const now = periodOf(await hourNow($))
-        if (now === period) return
+        const [stored, at] = await Promise.all([$.store.get(STORE_KEY), $.clock.now()])
+        const picks = parsePrefs(stored)
+        const changed = JSON.stringify(picks) !== seen
+        const now = periodOf(new Date(at).getHours())
+        const crossed = now !== period
+        if (!changed && !crossed) return
+        seen = JSON.stringify(picks)
         period = now
-        const kept = parsePrefs(await read($, prefsAtom))
-        if (kept.on && kept.wall === 'sky') await wear($, kept)
+        if (changed) await update($, prefsAtom, () => picks)
+        if (changed || (picks.on && picks.wall === 'sky')) await wear($, picks, new Date(at).getHours())
       })()
     })
     return next(e)
