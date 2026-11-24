@@ -102,8 +102,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(note?.text).toMatch(surface === 'terminal' ? /desktop app/ : /this computer/)
 
     await ui.press({ key: 'colors-eyecare' })
-    await ui.press({ key: 'glass' })
+    await ui.press({ key: 'glass-clear' })
     expect(sets.at(-1)?.backdrop).toMatchObject({ glass: { blur: 0, opacity: 0.05 } })
+    await ui.press({ key: 'glass-frosted' })
+    expect(sets.at(-1)?.backdrop).toMatchObject({ glass: { blur: 2, opacity: 0.25 } })
+    await ui.press({ key: 'glass-clear' })
     await ui.press({ key: 'wall-plain' })
     await ui.press({ key: 'messages-bookmark' })
     expect(sets.at(-1)?.style?.UserMessage).toMatchObject({ paddingY: 12 })

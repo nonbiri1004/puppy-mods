@@ -15,6 +15,7 @@ const prefsAtom = atom({ plugin: 'puppy-theme', key: 'prefs' } as const, DEFAULT
 
 const PALETTE_LABEL: Record<PaletteName, string> = { baibai: 'baibai · the brand greys', eyecare: 'eye care · softer text' }
 const WALL_LABEL: Record<Wall, string> = { sky: 'framed sky', plain: 'plain wall' }
+const GLASS_LABEL = { true: 'frosted · a faint blur and a thin veil', false: 'clear · the sky as it is' } as const
 const MESSAGE_LABEL: Record<MessageStyle, string> = {
   pixel: 'pixel card with a tail',
   tape: 'taped paper notes',
@@ -151,8 +152,17 @@ export const register: Register = on => {
             <Text dimColor>{WALL_LABEL[prefs.wall]}</Text>
           </Box>
           {WALLS.map(w => choice(`wall-${w}`, prefs.wall === w, WALL_LABEL[w], () => pick($, p => ({ ...p, wall: w }))))}
-          {toggle('glass', prefs.glass, 'frosted glass', prefs.wall === 'sky' ? 'off: the sky shows clear' : 'for the framed sky', () =>
-            pick($, p => ({ ...p, glass: !p.glass })),
+        </Box>
+        <Box key="card-glass" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
+          <Box flexDirection="row" justifyContent="space-between">
+            <Text weight="semibold">glass</Text>
+            <Text dimColor>{prefs.glass ? 'frosted' : 'clear'}</Text>
+          </Box>
+          <Text dimColor>{prefs.wall === 'sky' ? 'the panels over the framed sky' : 'shows with the framed sky'}</Text>
+          {([true, false] as const).map(frosted =>
+            choice(`glass-${frosted ? 'frosted' : 'clear'}`, prefs.glass === frosted, GLASS_LABEL[`${frosted}`], () =>
+              pick($, p => ({ ...p, glass: frosted })),
+            ),
           )}
         </Box>
         <Box key="card-messages" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
