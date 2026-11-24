@@ -158,7 +158,11 @@ test('the sky follows the hour and the rain sounds', () => {
 })
 
 test('the glass never tints the panels, so the brand colors stay exact', () => {
-  for (const g of Object.values(GLASS)) expect(g.tint).toBe('rgba(0,0,0,0)')
+  for (const g of Object.values(GLASS)) {
+    // no tint: a see-through rgba() one drew the panels solid black in the app
+    expect(g).not.toHaveProperty('tint')
+    expect(g.opacity).toBeLessThanOrEqual(0.05)
+  }
   expect(GLASS.frosted.blur).toBeGreaterThan(0)
   expect(GLASS.frosted.blur).toBeLessThanOrEqual(2)
   expect(GLASS.clear.blur).toBe(0)
