@@ -1,14 +1,15 @@
-// The backdrop: a plain warm-grey wall (paper by day, charcoal by night) with
+// The backdrop: a plain warm-grey wall (paper in light mode, charcoal in dark) with
 // one small framed sky hung beside the sidebar, like the radio screen on
 // lofipuppy.app. Pixel art, crisp edges, slow motion, nothing flashes.
 //
 // Where: the root svg has no viewBox, so a unit is a CSS pixel and the frame
 // keeps its place beside the sidebar (199 px) at any window size. It hangs in
 // the strip between the sidebar and the text column, which stays clear with the
-// right pane open or shut:
+// sidebar open, the right pane open or shut:
 //   scene under 1364 px wide (or 320 tall): the wall alone, there is no room
 //   1364 to 1619: a slim upright frame, 24×96, at x 206
-//   1620 and up: the wide frame, 120×80, at x 215
+//   1620 and up: the wide frame, 116×76, at x 217
+// Both frames: a 2 px edge, a 2 px inner line, a shadow 2 right and 4 down.
 // (A folded sidebar with the pane open moves the text over the slim frame;
 // the API doesn't tell a backdrop that, so plain wall is the way out.)
 //
@@ -17,6 +18,7 @@
 
 import type { PaletteName } from '../types'
 
+import { night } from './brand-colors'
 import { paletteFor } from './palette'
 
 export type Period = 'dawn' | 'day' | 'dusk' | 'night'
@@ -27,30 +29,35 @@ export const periodOf = (hour: number): Period =>
   hour >= 5 && hour < 7 ? 'dawn' : hour >= 7 && hour < 17 ? 'day' : hour >= 17 && hour < 19 ? 'dusk' : 'night'
 
 // Sky colors, top to bottom. None is orange: in the brand that is the puppy's headphones alone.
+// The clear night is the brand's night screen; the rest are worked out around it,
+// warm at night like the brand's charcoal.
 const SKY: Record<Weather, Record<Period, readonly [string, string]>> = {
   clear: {
     dawn: ['#2e2b28', '#8a8f9a'],
-    day: ['#9aa3ad', '#d6d4ce'],
+    day: ['#9aa3ad', '#c6c9cb'], // the bottom kept off the frame's inner line
     dusk: ['#3a3f4a', '#7a7488'],
-    night: ['#201f1d', '#2e2b28'],
+    night: [night.night, night.skyBottom],
   },
   rain: {
     dawn: ['#2c2e31', '#5d636b'],
     day: ['#7d858d', '#a9adb0'],
     dusk: ['#30343b', '#555a63'],
-    night: ['#1b1d1f', '#2a2d30'],
+    night: [night.night, '#2b2926'],
   },
 }
-const STAR = '#efe8da'
-const NEBULA = { warm: '#443c35', warmLow: '#3b3530', blue: '#313840', blueLow: '#2b3036' }
-const PLANET = { body: '#5d5750', lit: '#77706a' }
+const STAR = night.nightText
+const NEBULA = { warm: night.nebulaWarm, warmLow: '#3b3530', blue: night.nebulaBlue, blueLow: '#2b3036' }
+// Dusk's sky is lighter than the night's, so its nebula and planet are lighter
+// than the sky too (the night's colors there read as dark smudges).
+const DUSK_NEBULA = { blue: '#8b8594', blueLow: '#7f7a8a' }
+const PLANET = { night: { body: '#5d5750', lit: '#77706a' }, dusk: { body: '#8f8a9c', lit: '#a5a0b0' } }
 const CLOUD = '#e8e6e1'
 const RAIN = '#b4bac1'
-const WINDOW = '#e9e4da' // the brand's night-screen text white
+const WINDOW = night.nightText
 // In dark mode a day sky is the brightest thing on the screen; a shade over it
 // (hidden in light mode) turns it to an overcast day that sits with the charcoal.
 const DAY_SHADE = 0.4
-const TOWN = '#15171a'
+const TOWN = night.night // the brand's night, warm like the clear night
 
 /** The scene names: one per palette, time of day and weather, so a change redraws (letters, digits and - only). */
 export const SCENE_ID = 'puppy-sky'
@@ -94,7 +101,10 @@ type Layout = {
   w: number
   h: number
   stars: readonly Star[]
-  nebula: string
+  /** the grey-blue nebula, in the given colors */
+  blue: (c: string, low: string) => string
+  /** the warm nebula, night only */
+  warm: string
   planet: readonly [number, number]
   clouds: readonly (readonly [number, number, number])[]
   /** shooting stars: start x, start y, travel x, travel y */
@@ -105,9 +115,8 @@ const SLIM: Layout = {
   w: 16,
   h: 88,
   stars: SLIM_STARS,
-  nebula:
-    rect(6, 18, 10, 4, NEBULA.blue) + rect(8, 22, 8, 2, NEBULA.blueLow) +
-    rect(0, 50, 10, 4, NEBULA.warm) + rect(2, 46, 6, 4, NEBULA.warm) + rect(0, 54, 12, 2, NEBULA.warmLow),
+  blue: (c, low) => rect(6, 18, 10, 4, c) + rect(8, 22, 8, 2, low),
+  warm: rect(0, 50, 10, 4, NEBULA.warm) + rect(2, 46, 6, 4, NEBULA.warm) + rect(0, 54, 12, 2, NEBULA.warmLow),
   planet: [8, 70],
   clouds: [[0, 20, 10], [6, 48, 10]],
   meteors: [[14, 4, -12, 24], [16, 30, -14, 26]],
@@ -116,17 +125,16 @@ const WIDE: Layout = {
   w: 108,
   h: 68,
   stars: WIDE_STARS,
-  nebula:
-    rect(10, 38, 36, 6, NEBULA.warm) + rect(18, 32, 24, 6, NEBULA.warm) + rect(24, 44, 30, 4, NEBULA.warmLow) +
-    rect(58, 14, 32, 6, NEBULA.blue) + rect(64, 8, 18, 6, NEBULA.blue) + rect(54, 20, 26, 4, NEBULA.blueLow),
+  blue: (c, low) => rect(58, 14, 32, 6, c) + rect(64, 8, 18, 6, c) + rect(54, 20, 26, 4, low),
+  warm: rect(10, 38, 36, 6, NEBULA.warm) + rect(18, 32, 24, 6, NEBULA.warm) + rect(24, 44, 30, 4, NEBULA.warmLow),
   planet: [84, 48],
   clouds: [[8, 14, 30], [52, 30, 36], [24, 48, 24]],
   meteors: [[96, 4, -40, 26], [70, 2, -34, 30]],
 }
 
-const planet = ([x, y]: readonly [number, number]): string =>
-  rect(x + 1, y, 4, 2, PLANET.body) + rect(x, y + 2, 6, 4, PLANET.body) + rect(x + 1, y + 6, 4, 2, PLANET.body) +
-  rect(x + 1, y + 2, 2, 2, PLANET.lit)
+const planet = ([x, y]: readonly [number, number], c: { body: string; lit: string }): string =>
+  rect(x + 1, y, 4, 2, c.body) + rect(x, y + 2, 6, 4, c.body) + rect(x + 1, y + 6, 4, 2, c.body) +
+  rect(x + 1, y + 2, 2, 2, c.lit)
 
 // A shooting star: a short pixel streak, hidden at rest, crossing once a cycle.
 // Each has its own keyframes (no CSS variables), named by the frame width.
@@ -138,6 +146,7 @@ const meteor = (w: number) => ([x, y, dx, dy]: readonly [number, number, number,
   `</g>`
 
 // Rain: two stacked copies of the same streaks slide down one sky height, so it loops.
+// The streaks are 1 px on purpose, finer than the 2 px art; everything else sits on the 2 px grid.
 const rain = (l: Layout, period: Period): string => {
   const streaks: string[] = []
   const step = l.w > 40 ? 9 : 5
@@ -146,16 +155,16 @@ const rain = (l: Layout, period: Period): string => {
   }
   const one = streaks.join('')
   const drops = [0, 1, 2].map(i => {
-    const x = Math.round(((i + 1) * l.w) / 4) - 1
+    const x = Math.round(((i + 1) * l.w) / 8) * 2
     return rect(x, 4 + i * 6, 2, 2, RAIN, ` class="drop drop-${l.w}" style="animation-delay:-${i * 4.5}s"`)
   })
   // Under a day sky in light mode the near-black town was the heaviest spot on the
   // screen; there it takes the brand's muted grey (the .town-day rules below).
   const cls = period === 'day' ? ' class="town-day"' : ''
   const town =
-    rect(0, l.h - 8, l.w, 8, TOWN, cls) + rect(Math.round(l.w / 2), l.h - 12, Math.round(l.w / 3), 4, TOWN, cls)
+    rect(0, l.h - 8, l.w, 8, TOWN, cls) + rect(Math.round(l.w / 4) * 2, l.h - 12, Math.round(l.w / 6) * 2, 4, TOWN, cls)
   const windows = [0.2, 0.55, 0.8].map(
-    (f, i) => rect(Math.round(f * l.w), l.h - 6, 2, 2, WINDOW, ` class="win" style="animation-delay:-${i * 3.7}s"`),
+    (f, i) => rect(Math.round((f * l.w) / 2) * 2, l.h - 6, 2, 2, WINDOW, ` class="win" style="animation-delay:-${i * 3.7}s"`),
   )
   return (
     `<g class="rain-${l.w}" fill="${RAIN}" opacity=".45"><g>${one}</g><g transform="translate(0 -${l.h})">${one}</g></g>` +
@@ -180,9 +189,13 @@ const sky = (l: Layout, period: Period, weather: Weather): string => {
   if (period === 'day') {
     parts.push(rect(0, 0, l.w, l.h, '#000', ' class="day-shade"'))
   } else if (weather === 'clear') {
+    // dawn: a few last stars only; dusk: a light nebula and planet; night: all of it
     const shown = period === 'night' ? l.stars : period === 'dusk' ? l.stars.slice(0, 4) : l.stars.slice(0, 2)
-    if (period !== 'dawn') parts.push(`<g class="neb" opacity="${period === 'night' ? 0.9 : 0.5}">${l.nebula}</g>`)
-    parts.push(planet(l.planet))
+    if (period === 'night') {
+      parts.push(`<g class="neb" opacity=".9">${l.warm}${l.blue(NEBULA.blue, NEBULA.blueLow)}</g>`, planet(l.planet, PLANET.night))
+    } else if (period === 'dusk') {
+      parts.push(`<g class="neb" opacity=".5">${l.blue(DUSK_NEBULA.blue, DUSK_NEBULA.blueLow)}</g>`, planet(l.planet, PLANET.dusk))
+    }
     parts.push(`<g class="stars" fill="${STAR}">${shown.map(star).join('')}</g>`)
     if (period === 'night') parts.push(l.meteors.map(meteor(l.w)).join(''))
   }
@@ -220,17 +233,17 @@ export const drawScene = (palette: PaletteName = 'baibai', period: Period = 'nig
     `<g class="slim">`,
     `<path class="cord" d="M211 84 L218 68 L225 84" fill="none" stroke-width="1"/>`,
     rect(216, 66, 4, 4, undefined, ' class="nail"'),
-    rect(208, 87, 24, 96, undefined, ' class="shade"'),
+    rect(208, 88, 24, 96, undefined, ' class="shade"'),
     rect(206, 84, 24, 96, undefined, ' class="frame"'),
     rect(208, 86, 20, 92, undefined, ' class="frame-in"'),
     slim,
     `</g>`,
     `<g class="wide">`,
-    `<path class="cord" d="M239 92 L275 70 L311 92" fill="none" stroke-width="2"/>`,
+    `<path class="cord" d="M241 94 L275 70 L309 94" fill="none" stroke-width="2"/>`,
     rect(273, 68, 4, 4, undefined, ' class="nail"'),
-    rect(217, 96, 120, 80, undefined, ' class="shade"'),
-    rect(215, 92, 120, 80, undefined, ' class="frame"'),
-    rect(217, 94, 116, 76, undefined, ' class="frame-in"'),
+    rect(219, 98, 116, 76, undefined, ' class="shade"'),
+    rect(217, 94, 116, 76, undefined, ' class="frame"'),
+    rect(219, 96, 112, 72, undefined, ' class="frame-in"'),
     wide,
     `</g>`,
     `</svg>`,

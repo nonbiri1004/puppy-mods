@@ -13,7 +13,7 @@ const PANE = 'look'
 // What the pane draws from: the session's copy of what $.store keeps.
 const prefsAtom = atom({ plugin: 'puppy-theme', key: 'prefs' } as const, DEFAULT_PREFS)
 
-const PALETTE_LABEL: Record<PaletteName, string> = { baibai: 'baibai · the brand greys', eyecare: 'eye care · softer text' }
+const PALETTE_LABEL: Record<PaletteName, string> = { baibai: 'baibai · the brand greys', eyecare: 'eye care · softer text, warmer paper' }
 const WALL_LABEL: Record<Wall, string> = { sky: 'framed sky', plain: 'plain wall' }
 const GLASS_LABEL = { true: 'frosted · the frame a little soft', false: 'clear · the sky as it is' } as const
 const MESSAGE_LABEL: Record<MessageStyle, string> = {
@@ -32,12 +32,11 @@ const CUE_LABEL: Record<CueName, string> = {
   click: 'you click the wall',
 }
 
-// Sets the whole look (or, turned off, takes it away); a build that refuses style or sound gets colors and
-// the backdrop alone.
 // The local hour, for the sky's time of day.
 const hourNow = async ($: EngineInterface): Promise<number> => new Date(await $.clock.now()).getHours()
 
-// The look goes on first; the paint check is only a note, so it runs after.
+// Sets the whole look (or, turned off, takes it away); a build that refuses style or sound gets colors and
+// the backdrop alone. The look goes on first; the paint check is only a note, so it runs after.
 const wear = async ($: EngineInterface, prefs: Prefs, known?: number): Promise<void> => {
   if (!prefs.on) {
     await $.theme.clear()
@@ -81,7 +80,7 @@ export const register: Register = on => {
     const hour = new Date(now).getHours()
     await Promise.all([
       wear($, prefs, hour),
-      $.command.register({ name: 'look', description: "pick the puppy's wall, message style and sounds" }),
+      $.command.register({ name: 'look', description: "pick the puppy's colors, wall, glass, messages and sounds" }),
       update($, prefsAtom, () => prefs),
     ])
     // The sky follows the time of day: look once a minute, and wear the look
@@ -186,7 +185,7 @@ export const register: Register = on => {
         <Box key="card-sounds" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
           <Box flexDirection="row" justifyContent="space-between">
             <Text weight="semibold">sounds</Text>
-            <Text dimColor>{`${prefs.sounds} · ${cuesOn} of ${CUES.length}`}</Text>
+            <Text dimColor>{`${SOUND_LABEL[prefs.sounds].split(' · ')[0]} · ${cuesOn} of ${CUES.length}`}</Text>
           </Box>
           <Text dimColor>play once the speaker in the title bar is on</Text>
           {SOUND_SETS.map(set =>
