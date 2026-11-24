@@ -210,7 +210,10 @@ test('an open session takes picks another session stored, and the sky follows th
 })
 
 // An engine with a clock that moves only when the test says, for the watch.
-const watched = (on: Parameters<TestBody>[1], stored: unknown, at: Date) => {
+// themeSet may throw to refuse a look; stateSet, when given, runs before each
+// write of the session's state (it may wait, or return a reason to refuse it), over a state kept here.
+type Extra = { themeSet?: (e: ThemeSetArgs) => void; stateSet?: () => Promise<string | void> | string | void }
+const watched = (on: Parameters<TestBody>[1], stored: unknown, at: Date, extra: Extra = {}) => {
   const clock = mock.clock(on, { now: at.getTime() })
   const store = new Map<string, unknown>(stored === undefined ? [] : [['prefs', stored]])
   const sets: ThemeSetArgs[] = []
@@ -221,6 +224,7 @@ const watched = (on: Parameters<TestBody>[1], stored: unknown, at: Date) => {
     return { value: undefined }
   })
   on('theme.set', (_, e) => {
+    extra.themeSet?.(e)
     sets.push(e)
     return { value: { isDrawn: true as const, requestId: 'test' } }
   })
@@ -228,6 +232,20 @@ const watched = (on: Parameters<TestBody>[1], stored: unknown, at: Date) => {
     clears += 1
     return { value: { isDrawn: false as const, reason: 'cleared' } }
   })
+  if (extra.stateSet !== undefined) {
+    const stateSet = extra.stateSet
+    const state = new Map<string, { value: unknown; version: number }>()
+    on('state.get', (_, e) => ({ value: state.get(`${e.plugin}/${e.key}`) ?? { value: undefined, version: 0 } }))
+    on('state.set', async (_, e) => {
+      const refused = await stateSet()
+      if (typeof refused === 'string') return { deny: refused }
+      const name = `${e.plugin}/${e.key}`
+      const was = state.get(name) ?? { value: undefined, version: 0 }
+      if (e.ifVersion !== undefined && e.ifVersion !== was.version) return { value: { isSet: false as const, version: was.version } }
+      state.set(name, { value: e.value, version: was.version + 1 })
+      return { value: { isSet: true as const, version: was.version + 1 } }
+    })
+  }
   on('ui.log', () => ({ value: undefined }))
   on('command.register', () => ({ value: { command: 'look' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -312,4 +330,73 @@ test('a round whose wear fails is tried again on the next', async ($, on) => {
   refuse = false
   await clock.advance(5_000)
   expect(sets.at(-1)?.style?.UserMessage).toHaveLength(2)
+})
+
+test('a refused whole look falls back to colors, and the next wear tries the whole look again', async ($, on) => {
+  let refuseOnce = true
+  const { sets } = watched(on, undefined, new Date(2026, 10, 24, 12, 0), {
+    themeSet: e => {
+      if ('style' in e && refuseOnce) {
+        refuseOnce = false
+        throw new Error('busy for a moment')
+      }
+    },
+  })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(sets.at(-1)).not.toHaveProperty('style')
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'messages-tape' })
+  expect(sets.at(-1)?.style?.UserMessage).toHaveLength(2)
+  await ui.unmount()
+})
+
+test('a turn off whose pane copy fails to update is still cleared by the watch', async ($, on) => {
+  let refuse = false
+  const { clock, store, clears } = watched(on, undefined, new Date(2026, 10, 24, 12, 0), {
+    stateSet: () => {
+      if (refuse) {
+        refuse = false
+        return 'state busy'
+      }
+    },
+  })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  refuse = true
+  try {
+    await ui.press({ key: 'on' })
+  } catch {
+    // the press reports the failure
+  }
+  expect(store.get('prefs')).toMatchObject({ on: false })
+  await clock.advance(5_000)
+  expect(clears()).toBe(1)
+  await ui.unmount()
+})
+
+test('with the look off all along, a press during a sync round never clears', async ($, on) => {
+  // hold the watch's next pane update until the press is done
+  let release: () => void = () => {}
+  let hold = false
+  const { clock, store, sets, clears } = watched(on, { on: false }, new Date(2026, 10, 24, 12, 0), {
+    stateSet: async () => {
+      if (hold) {
+        hold = false
+        await new Promise<void>(r => {
+          release = r
+        })
+      }
+    },
+  })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  hold = true
+  store.set('prefs', { on: false, colors: 'eyecare' })
+  await clock.advance(5_000)
+  await ui.press({ key: 'glass-frosted' })
+  release()
+  await clock.advance(10_000)
+  expect(sets).toHaveLength(0)
+  expect(clears()).toBe(0)
+  await ui.unmount()
 })

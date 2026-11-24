@@ -35,28 +35,27 @@ const CUE_LABEL: Record<CueName, string> = {
 // The local hour, for the sky's time of day.
 const hourNow = async ($: EngineInterface): Promise<number> => new Date(await $.clock.now()).getHours()
 
-// A build that refused style or sound once gets colors and the backdrop from
-// then on, so the note shows once and no full look is sent to be refused again.
-let colorsOnly = false
+// The "colors only" note shows once a session. The whole look is still tried
+// each time: a failure can be passing, and one that stuck would keep the
+// messages and sounds off until the next session.
+let colorsOnlyNoted = false
 // The palettes whose paint note was shown, so it shows once a palette.
 const noted = new Set<PaletteName>()
 
 // Puts the look on. The paint check is only a note, so it runs after.
 const wear = async ($: EngineInterface, prefs: Prefs, known?: number): Promise<void> => {
   const hour = known ?? (await hourNow($))
-  let set: ThemeResult | undefined
-  if (!colorsOnly) {
-    try {
-      set = await $.theme.set(lookFor(prefs, hour))
-    } catch (error) {
-      // only if colors alone go on was it the style or sound: a failure of
-      // both is passed up, and the next try sends the whole look again
-      set = await $.theme.set(baseLook(prefs, hour))
-      colorsOnly = true
+  let set: ThemeResult
+  try {
+    set = await $.theme.set(lookFor(prefs, hour))
+  } catch (error) {
+    // a failure of the colors too is passed up, and the next try starts over
+    set = await $.theme.set(baseLook(prefs, hour))
+    if (!colorsOnlyNoted) {
+      colorsOnlyNoted = true
       $.ui.log(`puppy-theme: style or sound refused, colors only (${String(error)})`)
     }
   }
-  set ??= await $.theme.set(baseLook(prefs, hour))
   // Not drawn yet is normal when the session starts before the app's window
   // attaches (after a restart, in the background, in a side chat): the theme
   // stands and draws when it attaches. So the line goes to the debug log only.
@@ -82,12 +81,12 @@ const apply = async ($: EngineInterface, prefs: Prefs, was: Prefs | undefined, h
 }
 
 // What this session last wore (undefined until the first wear works), and the
-// presses so far: the watch skips a round a press came in during. dirty: a
-// round's wear finished after a press's, so it may stand over it; the next
-// round wears the stored picks again.
+// presses so far: the watch skips a round a press came in during. stale: a
+// round's wear ('worn') or clear ('cleared') finished after a press's, so it
+// may stand over it; the next round puts the stored picks on again.
 let worn: Prefs | undefined
 let presses = 0
-let dirty = false
+let stale: false | 'worn' | 'cleared' = false
 const same = (a: Prefs | undefined, b: Prefs): boolean => JSON.stringify(a) === JSON.stringify(b)
 
 // One change from the pane, made to what the store keeps now (not this
@@ -99,11 +98,11 @@ const pick = async ($: EngineInterface, change: (p: Prefs) => Prefs): Promise<vo
   const now = change(parsePrefs(raw))
   const was = worn
   worn = now
-  await Promise.all([$.store.set(STORE_KEY, keepUnknown(raw, now)), update($, prefsAtom, () => now)])
   try {
+    await Promise.all([$.store.set(STORE_KEY, keepUnknown(raw, now)), update($, prefsAtom, () => now)])
     await apply($, now, was)
   } catch (error) {
-    worn = was // not worn after all: the watch tries again
+    worn = was // not worn after all: the watch puts the stored picks on
     throw error
   }
 }
@@ -121,19 +120,21 @@ const follow = async ($: EngineInterface): Promise<void> => {
   if (presses !== pressed) return // the press stored newer picks; the next round reads them
   const picks = parsePrefs(stored)
   const hour = new Date(at).getHours()
-  const changed = dirty || !same(worn, picks)
+  const changed = stale !== false || !same(worn, picks)
   const crossed = periodOf(hour) !== period
   if (!changed && !crossed) return
   if (changed) await update($, prefsAtom, () => picks)
-  // after a dirty round the look may be on whatever was stored, so an off clears
-  const was = dirty ? { ...picks, on: true } : worn
-  if (changed || (picks.on && picks.wall === 'sky')) await apply($, picks, was, hour)
+  // after a stale wear the look may be on, so an off clears
+  const was = stale === 'worn' ? { ...picks, on: true } : worn
+  const applies = changed || (picks.on && picks.wall === 'sky')
+  if (applies) await apply($, picks, was, hour)
   if (presses !== pressed) {
-    dirty = true
+    // only a wear or clear this round made can stand over the press's
+    if (applies && (picks.on || was?.on === true)) stale = picks.on ? 'worn' : 'cleared'
     return
   }
   worn = picks
-  dirty = false
+  stale = false
   period = periodOf(hour)
 }
 
@@ -143,7 +144,7 @@ export const register: Register = on => {
     // as soon as the picks and the hour are read; the command and the pane's copy
     // of the picks are set up alongside, not before. A look that fails to go on
     // is noted, and the watch below still starts and tries again.
-    colorsOnly = false
+    colorsOnlyNoted = false
     noted.clear()
     const [kept, now] = await Promise.all([$.store.get(STORE_KEY), $.clock.now()])
     const prefs = parsePrefs(kept)
