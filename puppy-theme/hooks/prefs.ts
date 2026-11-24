@@ -17,7 +17,7 @@ export const DEFAULT_PREFS: Prefs = {
   on: true,
   colors: 'baibai',
   wall: 'sky',
-  glass: true,
+  glass: false, // clear: the frame hangs where no words cross it, so the sky shows at full color
   messages: 'pixel',
   sounds: 'lofi',
   cues: { send: true, tool: true, compact: true, done: true, ask: true, error: true, click: true },

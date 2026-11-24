@@ -159,8 +159,8 @@ test('the sky follows the hour and the rain sounds', () => {
 
 test('the look follows each pick', () => {
   const full = lookFor(DEFAULT_PREFS)
-  expect(full.backdrop).toMatchObject({ scene: sceneName('baibai', 'night', 'clear'), glass: GLASS.frosted })
-  expect(lookFor({ ...DEFAULT_PREFS, glass: false }).backdrop).toMatchObject({ glass: GLASS.clear })
+  expect(full.backdrop).toMatchObject({ scene: sceneName('baibai', 'night', 'clear'), glass: GLASS.clear })
+  expect(lookFor({ ...DEFAULT_PREFS, glass: true }).backdrop).toMatchObject({ glass: GLASS.frosted })
   expect(full.style).toBeDefined()
   expect(Object.keys(full.sound?.cues ?? {})).toHaveLength(7)
 
@@ -187,7 +187,7 @@ test('what an earlier version stored is read field by field', () => {
   expect(old).not.toHaveProperty('palette')
   expect(old.wall).toBe('sky')
   expect(old.messages).toBe('pixel')
-  expect(old.glass).toBe(true)
+  expect(old.glass).toBe(false)
   // the on/off switch an earlier build kept turns into a pick
   expect(parsePrefs({ style: false }).messages).toBe('app')
   expect(parsePrefs({ style: true }).messages).toBe('pixel')

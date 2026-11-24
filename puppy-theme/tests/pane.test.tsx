@@ -102,11 +102,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(note?.text).toMatch(surface === 'terminal' ? /desktop app/ : /this computer/)
 
     await ui.press({ key: 'colors-eyecare' })
-    await ui.press({ key: 'glass-clear' })
-    expect(sets.at(-1)?.backdrop).toMatchObject({ glass: { blur: 0, opacity: 0.05 } })
     await ui.press({ key: 'glass-frosted' })
     expect(sets.at(-1)?.backdrop).toMatchObject({ glass: { blur: 2, opacity: 0.25 } })
     await ui.press({ key: 'glass-clear' })
+    expect(sets.at(-1)?.backdrop).toMatchObject({ glass: { blur: 0, opacity: 0.05 } })
     await ui.press({ key: 'wall-plain' })
     await ui.press({ key: 'messages-bookmark' })
     expect(sets.at(-1)?.style?.UserMessage).toMatchObject({ paddingY: 12 })
@@ -145,7 +144,7 @@ test('the look turns off to the app\'s own and back, and reset brings the defaul
   expect(store.get('prefs')).toMatchObject({ on: false, wall: 'plain', sounds: 'chip' })
 
   await ui.press({ key: 'reset' })
-  expect(store.get('prefs')).toMatchObject({ on: true, colors: 'baibai', wall: 'sky', glass: true, messages: 'pixel', sounds: 'lofi' })
+  expect(store.get('prefs')).toMatchObject({ on: true, colors: 'baibai', wall: 'sky', glass: false, messages: 'pixel', sounds: 'lofi' })
   expect(sets.at(-1)?.backdrop).toMatchObject({ scene: 'puppy-sky-baibai-day-clear' })
   await ui.unmount()
 })
