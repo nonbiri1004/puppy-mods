@@ -7,7 +7,7 @@
 
 import type { PaletteName } from '../types'
 
-import { dark, light, type PageColors } from './brand-colors'
+import { dark, light, night, type PageColors } from './brand-colors'
 
 export const PALETTE_NAMES: readonly PaletteName[] = ['baibai', 'eyecare']
 
@@ -23,12 +23,16 @@ export const BRAND: Palette = { light, dark }
 // the puppy's headphones alone). accent: the night sky's grey-blue nebula;
 // success and warning: puppy-console's --ok and --listen; danger: a brick red
 // kept well away from the headphones' hue; pro: the dusk sky's grey violet.
+// The dusk sky's grey violet, at the bottom of the dusk sky and the seed of pro.
+// Not a brand color: worked out between the brand's charcoal and the night blue.
+export const DUSK_VIOLET = '#7a7488'
+
 export const ROLES = {
-  accent: '#313840',
+  accent: night.nebulaBlue,
   success: '#7f9a72',
   warning: '#c2a768',
   danger: '#b4483c',
-  pro: '#7a7488',
+  pro: DUSK_VIOLET,
 } as const
 
 /** The only knobs of the eye-care palette. Change a number here, never a derived hex. */

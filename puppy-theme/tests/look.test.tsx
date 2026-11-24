@@ -4,7 +4,7 @@ import { checkColors } from '../hooks/make-colors.js'
 import { GLASS, lookColors, lookFor } from '../hooks/look'
 import { makeColors } from '../hooks/make-colors.js'
 import { BRAND, contrast as ratio, deriveEyeCare, paletteFor, PALETTE_NAMES, ROLES } from '../hooks/palette'
-import { DEFAULT_PREFS, parsePrefs } from '../hooks/prefs'
+import { DEFAULT_PREFS, keepUnknown, parsePrefs } from '../hooks/prefs'
 import { drawScene, periodOf, readSceneName, sceneName } from '../hooks/scene'
 import { BOOKMARK, STYLES, TAPE } from '../hooks/style'
 
@@ -22,7 +22,7 @@ const contrast = (a: number[], b: number[]) => {
 }
 
 const backdrop = (scene: string) =>
-  ({ plugin: 'puppy-theme', component: 'Backdrop', props: { plugin: 'puppy-theme', scene, glass: { blur: 20, opacity: 0.6 } } }) as const
+  ({ plugin: 'puppy-theme', component: 'Backdrop', props: { plugin: 'puppy-theme', scene, glass: { blur: 16, opacity: 0.6 } } }) as const
 
 for (const name of PALETTE_NAMES) {
   test(`the ${name} colors use only names the app knows, and Desktop paints them`, () => {
@@ -81,7 +81,7 @@ test('baibai is the brand exactly, and eye care is worked out from it', () => {
   expect(paletteFor('baibai')).toBe(BRAND)
   const eye = deriveEyeCare(BRAND)
   expect(eye.dark.wall).toBe(BRAND.dark.wall) // the charcoal stays
-  expect(eye.light.wall).not.toBe(BRAND.light.wall) // a warmer day wall
+  expect(eye.light.wall).not.toBe(BRAND.light.wall) // a warmer light-mode wall
   expect(ratio(eye.dark.text, eye.dark.wall)).toBeLessThan(ratio(BRAND.dark.text, BRAND.dark.wall))
 })
 
@@ -104,6 +104,10 @@ test('the git status colors come from the look: no orange, and 4.5:1 on the card
         expect(`${k} ${h >= 15 && h <= 40 && s >= 0.5 ? 'orange' : 'ok'}`).toBe(`${k} ok`)
         expect(ratio(v, card)).toBeGreaterThanOrEqual(4.5)
       }
+      // each comes from its own role scale: one that fell back to the muted grey would pass the rest
+      expect(inputs['text-git-added']).not.toBe(inputs['text-git-draft'])
+      expect(inputs['text-git-removed']).not.toBe(inputs['text-git-draft'])
+      expect(inputs['text-git-merged']).not.toBe(inputs['text-git-draft'])
     }
   }
 })
@@ -114,11 +118,16 @@ test('the colors carry no orange: in the brand it is the headphones alone', () =
 })
 
 test('each message style keeps its words at 3:1 on every color it draws', () => {
+  // the tape over the note's own background, as the app is given it; the pixel
+  // card's outline is border-strong, which the app works out itself (makeColors
+  // names it as neutral-900 at 20%, not a color of the look), so the brand's
+  // edge stands in for it
   for (const name of PALETTE_NAMES) {
-    for (const mode of [paletteFor(name).light, paletteFor(name).dark]) {
-      const words = rgb(mode.text)
-      expect(contrast(words, rgb(TAPE, mode.card))).toBeGreaterThanOrEqual(3)
-      expect(contrast(words, rgb(mode.edge))).toBeGreaterThanOrEqual(3)
+    for (const mode of ['light', 'dark'] as const) {
+      const inputs = lookColors(name).colors.inputs?.[mode] as Record<string, string>
+      const words = rgb(inputs['text-user-message']!)
+      expect(contrast(words, rgb(TAPE, inputs['bg-user-message']))).toBeGreaterThanOrEqual(3)
+      expect(contrast(words, rgb(paletteFor(name)[mode].edge))).toBeGreaterThanOrEqual(3)
     }
   }
   // the bookmark strip is one slate blue for both modes: it holds 3:1 with the
@@ -158,7 +167,7 @@ test('every scene is pure vector, slow, small enough and free of orange', () => 
         expect(scene).toContain('crispEdges')
         expect(scene.toLowerCase()).not.toMatch(/#f08a3c|#e07b35/)
         // every animation lasts 7 seconds or more: nothing flashes
-        const times = [...scene.matchAll(/(?:animation(?:-duration)?:[a-z-]* ?)(\d+(?:\.\d+)?)s/g)].map(m => Number(m[1]))
+        const times = [...scene.matchAll(/animation(?:-duration)?:(?:[a-z][a-z0-9-]* )?(\d+(?:\.\d+)?)s/g)].map(m => Number(m[1]))
         expect(times.length).toBeGreaterThan(0)
         for (const s of times) expect(s).toBeGreaterThanOrEqual(7)
       }
@@ -191,7 +200,7 @@ test('the sky follows the hour and the rain sounds', () => {
   expect(readSceneName('puppy-sky-gruvbox-night-clear')).toBeUndefined()
 })
 
-test('the glass never tints the panels, so the brand colors stay exact', () => {
+test('the glass never tints the panels, so the colors shift one step at most', () => {
   for (const g of Object.values(GLASS)) {
     // no tint: a see-through rgba() one drew the panels solid black in the app
     expect(g).not.toHaveProperty('tint')
@@ -209,12 +218,36 @@ test('in dark mode the sky wall is the card, as bright as the plain wall', () =>
   }
 })
 
+test('in dark mode your note is one grey step above the chat panel, so it shows as a note', () => {
+  for (const name of PALETTE_NAMES) {
+    const dark = lookColors(name).colors.inputs?.dark as Record<string, string>
+    const panel = paletteFor(name).dark.card
+    expect(dark['bg-user-message']).not.toBe(panel)
+    expect(dark['bg-user-message']).toBe(dark['gray-800'])
+    expect(ratio(dark['bg-user-message']!, panel)).toBeGreaterThan(1.1)
+    expect(ratio(dark['text-user-message']!, dark['bg-user-message']!)).toBeGreaterThanOrEqual(7)
+  }
+})
+
+test('a clear dawn gets a lighter shade in dark mode, and the town stays over the shade', () => {
+  const dawn = drawScene('baibai', 'dawn', 'clear')
+  expect(dawn).toContain('class="dawn-shade"')
+  expect(dawn).toMatch(/\.day-shade,\.dawn-shade\{opacity:0\}.*prefers-color-scheme: dark.*\.dawn-shade\{opacity:0\.15\}/s)
+  expect(drawScene('baibai', 'dawn', 'rain')).not.toContain('class="dawn-shade"')
+  // the shade is drawn before the town and its windows, so they keep their own colors
+  const rain = drawScene('baibai', 'day', 'rain')
+  const firstShade = rain.indexOf('class="day-shade"')
+  expect(firstShade).toBeGreaterThan(-1)
+  expect(rain.indexOf('class="town-day"')).toBeGreaterThan(firstShade)
+  expect(rain.indexOf('class="win"')).toBeGreaterThan(firstShade)
+})
+
 test('a day sky gets a shade in dark mode only', () => {
   for (const w of ['clear', 'rain'] as const) {
     const day = drawScene('baibai', 'day', w)
     expect(day).toContain('class="day-shade"')
     // hidden by default, shown inside the dark-mode rule
-    expect(day).toMatch(/\.day-shade\{opacity:0\}.*prefers-color-scheme: dark.*\.day-shade\{opacity:0\.4\}/s)
+    expect(day).toMatch(/\.day-shade,\.dawn-shade\{opacity:0\}.*prefers-color-scheme: dark.*\.day-shade\{opacity:0\.4\}/s)
   }
   for (const p of ['dawn', 'dusk', 'night'] as const) expect(drawScene('baibai', p, 'clear')).not.toContain('class="day-shade"')
 })
@@ -268,6 +301,18 @@ test('what an earlier version stored is read field by field', () => {
   expect(old.cues.tool).toBe(false)
   expect(old.cues.send).toBe(true)
   expect(old.cues).not.toHaveProperty('beep')
+  // wrong types, arrays and null fall back too
+  expect(parsePrefs({ on: 'no', glass: 1 })).toEqual(DEFAULT_PREFS)
+  expect(parsePrefs([])).toEqual(DEFAULT_PREFS)
+  expect(parsePrefs(null)).toEqual(DEFAULT_PREFS)
+})
+
+test('storing picks keeps the fields a newer version added', () => {
+  const now = { ...DEFAULT_PREFS, colors: 'eyecare' as const }
+  const kept = keepUnknown({ font: 'mono', colors: 'baibai', cues: { hum: false } }, now)
+  expect(kept).toMatchObject({ font: 'mono', colors: 'eyecare', cues: { hum: false, send: true } })
+  expect(parsePrefs(kept)).toEqual(now)
+  expect(keepUnknown(undefined, now)).toEqual(now)
 })
 
 test('the backdrop draws our scene on the desktop and leaves others alone', async ($, on) => {

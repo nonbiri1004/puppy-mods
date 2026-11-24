@@ -1,7 +1,7 @@
 import type { ThemeColorInputs, ThemeMessageRule, ThemeStyle } from 'claude-code'
 
 import type { MessageStyle } from '../types'
-import type { Palette } from './palette'
+import type { Hex, Palette } from './palette'
 
 // How the conversation's own rows look. The words stay the app's text.
 //
@@ -14,10 +14,13 @@ import type { Palette } from './palette'
 // The message colors per mode: named in the style, so it follows light and dark.
 // Only the person's messages take them: Claude's replies already draw in
 // text-primary, and a bg-assistant-message turns each reply into a padded
-// bubble, out of line with the tool rows.
-export const messageColors = (p: Palette): Record<'light' | 'dark', ThemeColorInputs> => ({
+// bubble, out of line with the tool rows. In dark mode the chat panel behind
+// them is the card (#232321) with either wall, so a card-colored note left only
+// its tape showing; the note is one grey step up instead (`raised`, makeColors'
+// gray-800, the step the prompt box takes).
+export const messageColors = (p: Palette, raised: Hex): Record<'light' | 'dark', ThemeColorInputs> => ({
   light: { 'bg-user-message': p.light.card, 'text-user-message': p.light.text },
-  dark: { 'bg-user-message': p.dark.card, 'text-user-message': p.dark.text },
+  dark: { 'bg-user-message': raised, 'text-user-message': p.dark.text },
 })
 
 // Raw colors used in both modes. When the words are under 3:1 on any color of a

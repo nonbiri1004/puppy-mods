@@ -1,11 +1,11 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, ThemeResult } from 'claude-code'
 
 import type { CueName, MessageStyle, PaletteName, Prefs, Wall } from '../types'
 import { baseLook, lookColors, lookFor, unpainted } from './look'
-import { CUES, DEFAULT_PREFS, MESSAGE_STYLES, parsePrefs, SOUND_SETS, STORE_KEY, WALLS } from './prefs'
+import { CUES, DEFAULT_PREFS, keepUnknown, MESSAGE_STYLES, parsePrefs, SOUND_SETS, STORE_KEY, WALLS } from './prefs'
 import { PALETTE_NAMES } from './palette'
-import { drawScene, periodOf, readSceneName } from './scene'
+import { drawScene, type Period, periodOf, readSceneName } from './scene'
 import { SOUND_LABEL } from './sound'
 
 const PANE = 'look'
@@ -13,7 +13,7 @@ const PANE = 'look'
 // What the pane draws from: the session's copy of what $.store keeps.
 const prefsAtom = atom({ plugin: 'puppy-theme', key: 'prefs' } as const, DEFAULT_PREFS)
 
-const PALETTE_LABEL: Record<PaletteName, string> = { baibai: 'baibai · the brand greys', eyecare: 'eye care · softer text, warmer paper' }
+const PALETTE_LABEL: Record<PaletteName, string> = { baibai: 'baibai · the brand greys', eyecare: 'eye care · softer text, warmer light paper' }
 const WALL_LABEL: Record<Wall, string> = { sky: 'framed sky', plain: 'plain wall' }
 const GLASS_LABEL = { true: 'frosted · the frame a little soft', false: 'clear · the sky as it is' } as const
 const MESSAGE_LABEL: Record<MessageStyle, string> = {
@@ -35,20 +35,26 @@ const CUE_LABEL: Record<CueName, string> = {
 // The local hour, for the sky's time of day.
 const hourNow = async ($: EngineInterface): Promise<number> => new Date(await $.clock.now()).getHours()
 
-// Sets the whole look (or, turned off, takes it away); a build that refuses style or sound gets colors and
-// the backdrop alone. The look goes on first; the paint check is only a note, so it runs after.
+// The "colors only" note shows once a session. The whole look is still tried
+// each time: a failure can be passing, and one that stuck would keep the
+// messages and sounds off until the next session.
+let colorsOnlyNoted = false
+// The palettes whose paint note was shown, so it shows once a palette.
+const noted = new Set<PaletteName>()
+
+// Puts the look on. The paint check is only a note, so it runs after.
 const wear = async ($: EngineInterface, prefs: Prefs, known?: number): Promise<void> => {
-  if (!prefs.on) {
-    await $.theme.clear()
-    return
-  }
   const hour = known ?? (await hourNow($))
-  let set
+  let set: ThemeResult
   try {
     set = await $.theme.set(lookFor(prefs, hour))
   } catch (error) {
-    $.ui.log(`puppy-theme: style or sound refused, colors only (${String(error)})`)
+    // a failure of the colors too is passed up, and the next try starts over
     set = await $.theme.set(baseLook(prefs, hour))
+    if (!colorsOnlyNoted) {
+      colorsOnlyNoted = true
+      $.ui.log(`puppy-theme: style or sound refused, colors only (${String(error)})`)
+    }
   }
   // Not drawn yet is normal when the session starts before the app's window
   // attaches (after a restart, in the background, in a side chat): the theme
@@ -57,59 +63,113 @@ const wear = async ($: EngineInterface, prefs: Prefs, known?: number): Promise<v
     $.ui.log(`puppy-theme: not drawn (${set.reason})`, { to: 'debug' })
   }
   const problem = unpainted(lookColors(prefs.colors).problems)
-  if (problem !== undefined) {
+  if (problem !== undefined && !noted.has(prefs.colors)) {
+    noted.add(prefs.colors)
     $.ui.log(`puppy-theme: ${problem}`)
   }
 }
 
-// The picks this session last wore, as stored: the watch below compares against it.
-let seen = ''
+// Takes the look from what this session wore to these picks: on, it wears
+// them; turned off, it clears, and only then (a clear wipes any mod's theme, so
+// it waits for the person's own off, never a session start or a reload).
+const apply = async ($: EngineInterface, prefs: Prefs, was: Prefs | undefined, hour?: number): Promise<void> => {
+  if (prefs.on) {
+    await wear($, prefs, hour)
+  } else if (was?.on === true) {
+    await $.theme.clear()
+  }
+}
 
-// One change from the pane: keep it, then wear it.
+// What this session last wore (undefined until the first wear works), and the
+// presses so far: the watch skips a round a press came in during. stale: a
+// round's wear ('worn') or clear ('cleared') finished after a press's, so it
+// may stand over it; the next round puts the stored picks on again.
+let worn: Prefs | undefined
+let presses = 0
+let stale: false | 'worn' | 'cleared' = false
+const same = (a: Prefs | undefined, b: Prefs): boolean => JSON.stringify(a) === JSON.stringify(b)
+
+// One change from the pane, made to what the store keeps now (not this
+// session's copy, which can be a few seconds old), so a pick made in another
+// session a moment ago stays. Fields a newer version stored stay too.
 const pick = async ($: EngineInterface, change: (p: Prefs) => Prefs): Promise<void> => {
-  await update($, prefsAtom, was => change(parsePrefs(was)))
-  const now = parsePrefs(await read($, prefsAtom))
-  seen = JSON.stringify(now)
-  await $.store.set(STORE_KEY, now)
-  await wear($, now)
+  presses += 1
+  const raw = await $.store.get(STORE_KEY)
+  const now = change(parsePrefs(raw))
+  const was = worn
+  worn = now
+  try {
+    await Promise.all([$.store.set(STORE_KEY, keepUnknown(raw, now)), update($, prefsAtom, () => now)])
+    await apply($, now, was)
+  } catch (error) {
+    worn = was // not worn after all: the watch puts the stored picks on
+    throw error
+  }
 }
 
 // The watch: picks made in another session and the time of day; a reload starts a new one.
 let watch: { cancel: () => void } | undefined
+let period: Period = 'night'
 const WATCH_MS = 5_000
+
+// One round of the watch. What it wore is kept only once the wear works, so a
+// failed round is tried again on the next.
+const follow = async ($: EngineInterface): Promise<void> => {
+  const pressed = presses
+  const [stored, at] = await Promise.all([$.store.get(STORE_KEY), $.clock.now()])
+  if (presses !== pressed) return // the press stored newer picks; the next round reads them
+  const picks = parsePrefs(stored)
+  const hour = new Date(at).getHours()
+  const changed = stale !== false || !same(worn, picks)
+  const crossed = periodOf(hour) !== period
+  if (!changed && !crossed) return
+  if (changed) await update($, prefsAtom, () => picks)
+  // after a stale wear the look may be on, so an off clears
+  const was = stale === 'worn' ? { ...picks, on: true } : worn
+  const applies = changed || (picks.on && picks.wall === 'sky')
+  if (applies) await apply($, picks, was, hour)
+  if (presses !== pressed) {
+    // only a wear or clear this round made can stand over the press's
+    if (applies && (picks.on || was?.on === true)) stale = picks.on ? 'worn' : 'cleared'
+    return
+  }
+  worn = picks
+  stale = false
+  period = periodOf(hour)
+}
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     // Each session shows the app's own look until this runs, so the look goes on
     // as soon as the picks and the hour are read; the command and the pane's copy
-    // of the picks are set up alongside, not before.
+    // of the picks are set up alongside, not before. A look that fails to go on
+    // is noted, and the watch below still starts and tries again.
+    colorsOnlyNoted = false
+    noted.clear()
     const [kept, now] = await Promise.all([$.store.get(STORE_KEY), $.clock.now()])
     const prefs = parsePrefs(kept)
     const hour = new Date(now).getHours()
-    await Promise.all([
-      wear($, prefs, hour),
+    const [isWorn] = await Promise.all([
+      apply($, prefs, undefined, hour).then(
+        () => true,
+        (error: unknown) => {
+          $.ui.log(`puppy-theme: the look didn't go on (${String(error)}); trying again in a few seconds`)
+          return false
+        },
+      ),
       $.command.register({ name: 'look', description: "pick the puppy's colors, wall, glass, messages and sounds" }),
       update($, prefsAtom, () => prefs),
     ])
+    worn = isWorn ? prefs : undefined
+    period = periodOf(hour)
     // Every few seconds: if another session's /look stored new picks, take them
     // (each session wears its own look, and the store has no change event); and
     // if the hour crossed into dawn, day, dusk or night, wear the sky again.
     watch?.cancel()
-    seen = JSON.stringify(prefs)
-    let period = periodOf(hour)
     watch = $.clock.every(WATCH_MS, () => {
-      void (async () => {
-        const [stored, at] = await Promise.all([$.store.get(STORE_KEY), $.clock.now()])
-        const picks = parsePrefs(stored)
-        const changed = JSON.stringify(picks) !== seen
-        const now = periodOf(new Date(at).getHours())
-        const crossed = now !== period
-        if (!changed && !crossed) return
-        seen = JSON.stringify(picks)
-        period = now
-        if (changed) await update($, prefsAtom, () => picks)
-        if (changed || (picks.on && picks.wall === 'sky')) await wear($, picks, new Date(at).getHours())
-      })()
+      void follow($).catch((error: unknown) => {
+        $.ui.log(`puppy-theme: a sync round failed (${String(error)})`, { to: 'debug' })
+      })
     })
     return next(e)
   })
@@ -137,9 +197,11 @@ export const register: Register = on => {
             {label}
           </Text>
         </Box>
-        <Box flexShrink={0}>
-          <Text dimColor>{note}</Text>
-        </Box>
+        {note === '' ? null : (
+          <Box flexShrink={0}>
+            <Text dimColor>{note}</Text>
+          </Box>
+        )}
       </Box>
     )
     const cuesOn = CUES.filter(c => prefs.cues[c]).length
@@ -154,9 +216,8 @@ export const register: Register = on => {
             <Text weight="semibold">look</Text>
             <Text dimColor>{prefs.on ? 'on' : "off · the app's own"}</Text>
           </Box>
-          {toggle('on', prefs.on, 'wear the puppy look', 'off shows the app as it comes', () =>
-            pick($, p => ({ ...p, on: !p.on })),
-          )}
+          {toggle('on', prefs.on, 'wear the puppy look', '', () => pick($, p => ({ ...p, on: !p.on })))}
+          {prefs.on ? null : <Text dimColor>the picks below wait until the look is on</Text>}
           <Button key="reset" label="↺ back to the puppy's defaults" plain dimColor onPress={() => pick($, () => DEFAULT_PREFS)} />
         </Box>
         <Box key="card-colors" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
