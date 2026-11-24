@@ -202,6 +202,13 @@ test('the glass never tints the panels, so the brand colors stay exact', () => {
   expect(GLASS.clear.blur).toBe(0)
 })
 
+test('in dark mode the sky wall is the card, as bright as the plain wall', () => {
+  for (const palette of PALETTE_NAMES) {
+    const d = paletteFor(palette).dark
+    expect(drawScene(palette, 'night', 'clear')).toContain(`prefers-color-scheme: dark){.wall{fill:${d.card}}`)
+  }
+})
+
 test('a day sky gets a shade in dark mode only', () => {
   for (const w of ['clear', 'rain'] as const) {
     const day = drawScene('baibai', 'day', w)
