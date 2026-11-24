@@ -53,16 +53,14 @@ const surfaces = (name: (typeof PALETTE_NAMES)[number], mode: 'light' | 'dark') 
   }
 }
 
-test('tool rows sit in a pixel frame, their words 3:1 on its line in every palette and mode', () => {
+test('tool rows are quiet code-font lines with no box, their words 4.5:1 on the wall', () => {
   for (const s of Object.values(STYLES)) {
-    expect(s.ToolUse).toMatchObject({ color: 'text-secondary', fill: { vector: { viewBox: 12, slice: 4 } } })
+    expect(s.ToolUse).toEqual({ color: 'text-secondary', fontFamily: ['code'] })
   }
   for (const name of PALETTE_NAMES) {
     for (const mode of ['light', 'dark'] as const) {
-      const p = paletteFor(name)[mode]
       const t = surfaces(name, mode)
-      expect(ratio(t.secondary, p.line)).toBeGreaterThanOrEqual(3)
-      expect(ratio(t.secondary, t.s[1]!)).toBeGreaterThanOrEqual(4.5)
+      expect(ratio(t.secondary, t.s[0]!)).toBeGreaterThanOrEqual(4.5)
     }
   }
 })
@@ -87,6 +85,29 @@ test('baibai is the brand exactly, and eye care is worked out from it', () => {
   expect(ratio(eye.dark.text, eye.dark.wall)).toBeLessThan(ratio(BRAND.dark.text, BRAND.dark.wall))
 })
 
+test('the git status colors come from the look: no orange, and 4.5:1 on the cards', () => {
+  const hsl = (h: string) => {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255) as [number, number, number]
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min
+    if (d === 0) return { h: 0, s: 0 }
+    const s = d / (1 - Math.abs(2 * l - 1))
+    const hue = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+    return { h: (hue * 60 + 360) % 360, s }
+  }
+  for (const name of PALETTE_NAMES) {
+    const { colors } = lookColors(name)
+    for (const mode of ['light', 'dark'] as const) {
+      const inputs = colors.inputs?.[mode] as Record<string, string>
+      const card = paletteFor(name)[mode].card
+      for (const [k, v] of Object.entries(inputs).filter(([k]) => k.startsWith('text-git-'))) {
+        const { h, s } = hsl(v)
+        expect(`${k} ${h >= 15 && h <= 40 && s >= 0.5 ? 'orange' : 'ok'}`).toBe(`${k} ok`)
+        expect(ratio(v, card)).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  }
+})
+
 test('the colors carry no orange: in the brand it is the headphones alone', () => {
   const all = JSON.stringify([BRAND, deriveEyeCare(BRAND), ROLES]).toLowerCase()
   expect(all).not.toMatch(/#f08a3c|#e07b35|#d65d0e|#fe8019|#af3a03/)
@@ -101,15 +122,28 @@ test('each message style keeps its words at 3:1 on every color it draws', () => 
     }
   }
   // the bookmark strip is one slate blue for both modes: it holds 3:1 with the
-  // brand's words; eye care's softer dark text falls under, and then the app lays
-  // the message's backgroundColor (the card, same as the drawing's middle) under
-  // the words alone, so nothing shows. Check in the app.
+  // brand's words; eye care's softer text (light and dark) falls under, and then
+  // the app lays the message's backgroundColor (the card, same as the drawing's
+  // middle) under the words alone.
   for (const mode of [BRAND.light, BRAND.dark]) expect(contrast(rgb(mode.text), rgb(BOOKMARK))).toBeGreaterThanOrEqual(3)
   expect(STYLES.bookmark.UserMessage).toMatchObject({ backgroundColor: 'bg-user-message' })
   // every raw color a drawing uses is one of the checked ones
   const raw = JSON.stringify(STYLES).match(/#[0-9a-f]{6,8}/gi) ?? []
   expect([...new Set(raw)].sort()).toEqual(['#00000024', BOOKMARK, TAPE].sort())
   expect(JSON.stringify(STYLES).toLowerCase()).not.toMatch(/#f08a3c/)
+})
+
+test('the clear night is the brand night screen; dawn has no planet or nebula; the rain sits on the 2 px grid', () => {
+  const nightScene = drawScene('baibai', 'night', 'clear')
+  expect(nightScene).toContain('stop-color="#151412"')
+  expect(nightScene).toContain('stop-color="#23211e"')
+  const dawn = drawScene('baibai', 'dawn', 'clear')
+  expect(dawn).not.toContain('class="neb"')
+  expect(dawn).not.toContain('#5d5750')
+  expect(drawScene('baibai', 'dusk', 'clear')).not.toContain('#443c35') // no warm nebula at dusk
+  for (const m of drawScene('baibai', 'day', 'rain').matchAll(/<rect x="(\d+)"[^>]*class="(?:drop|win)/g)) {
+    expect(Number(m[1]) % 2).toBe(0)
+  }
 })
 
 const PERIODS = ['dawn', 'day', 'dusk', 'night'] as const
@@ -181,8 +215,12 @@ test('a day sky gets a shade in dark mode only', () => {
 test('under a day sky the town is the muted grey in light mode and stays dark in dark mode', () => {
   const day = drawScene('baibai', 'day', 'rain')
   expect(day).toContain('class="town-day"')
-  expect(day).toMatch(new RegExp(`\\.town-day\\{fill:${BRAND.light.muted}\\}.*prefers-color-scheme: dark.*\\.town-day\\{fill:#15171a\\}`, 's'))
+  expect(day).toMatch(new RegExp(`\\.town-day\\{fill:${BRAND.light.muted}\\}.*prefers-color-scheme: dark.*\\.town-day\\{fill:#151412\\}`, 's'))
   expect(drawScene('baibai', 'night', 'rain')).not.toContain('class="town-day"')
+})
+
+test('the body text keeps the app size, so the page does not jump when the look goes on', () => {
+  for (const style of Object.values(STYLES)) expect(style.Text).toBeUndefined()
 })
 
 test('the look follows each pick', () => {

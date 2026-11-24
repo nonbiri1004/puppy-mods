@@ -22,13 +22,13 @@ export const BRAND: Palette = { light, dark }
 // from the brand or the puppy family; none is orange (in the brand, orange is
 // the puppy's headphones alone). accent: the night sky's grey-blue nebula;
 // success and warning: puppy-console's --ok and --listen; danger: a brick red
-// kept well away from the headphones' hue; pro: the rooftop haze.
+// kept well away from the headphones' hue; pro: the dusk sky's grey violet.
 export const ROLES = {
   accent: '#313840',
   success: '#7f9a72',
   warning: '#c2a768',
   danger: '#b4483c',
-  pro: '#a29cc2',
+  pro: '#7a7488',
 } as const
 
 /** The only knobs of the eye-care palette. Change a number here, never a derived hex. */
@@ -96,7 +96,7 @@ const easeOne = (m: Six, d: readonly number[], textTarget: number, hardest: 'wal
   return { wall, card, line, edge, text, muted }
 }
 
-/** The eye-care palette, worked out from the brand's: softer text, a warmer day wall. */
+/** The eye-care palette, worked out from the brand's: softer text, a warmer light-mode wall. */
 export const deriveEyeCare = (brand: Palette): Palette => ({
   // light: the wall is the darkest surface, so the hardest for muted text
   light: easeOne(brand.light, EYE_CARE.lightShift, EYE_CARE.lightText, 'wall'),

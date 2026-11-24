@@ -1,17 +1,18 @@
-import type { ThemeColors, ThemeSetArgs, ThemeSound } from 'claude-code'
+import type { ThemeColorInputs, ThemeColors, ThemeSetArgs, ThemeSound } from 'claude-code'
 
 import type { PaletteName, Prefs } from '../types'
 
 import { makeColors } from './make-colors.js'
-import { paletteFor, ROLES, type Six } from './palette'
+import { type Hex, paletteFor, ROLES, type Six } from './palette'
 import { CUES } from './prefs'
 import { periodOf, sceneName } from './scene'
 import { SOUNDS } from './sound'
 import { messageColors, styleFor } from './style'
 
-// The brand gives six colors a mode; makeColors works out the rest (text-secondary,
-// the darker surfaces). Light mode's surface-2 is the card: left out, makeColors
-// gives pure white, and the brand has no third paper.
+// The brand gives six colors a mode; four go to makeColors as anchors, and it works
+// out the rest (text-secondary, the darker surfaces, border and border-strong).
+// line and edge are drawn only in the scene's frame. Light mode's surface-2 is the
+// card: left out, makeColors gives pure white, and the brand has no third paper.
 const anchors = (m: Six, mode: 'light' | 'dark') => ({
   'surface-0': m.wall,
   'surface-1': m.card,
@@ -19,6 +20,27 @@ const anchors = (m: Six, mode: 'light' | 'dark') => ({
   'text-primary': m.text,
   'text-muted': m.muted,
 })
+
+// The git status colors from the look's own roles, not makeColors' bright system
+// defaults (one of them, conflicting, is orange). A dark shade in light mode and a
+// light one in dark mode, so each reads at 4.5:1 or more on the cards.
+const gitColors = (inputs: ThemeColorInputs | undefined, muted: Hex, mode: 'light' | 'dark'): ThemeColorInputs => {
+  const shade = (role: string, light: number, dark: number): Hex => inputs?.[`role-${role}-${mode === 'light' ? light : dark}`] ?? muted
+  const added = shade('success', 600, 250)
+  const modified = shade('warning', 600, 200)
+  const removed = shade('danger', 600, 250)
+  return {
+    'text-git-added': added,
+    'fill-git-added': added,
+    'text-git-modified': modified,
+    'fill-git-modified': modified,
+    'text-git-removed': removed,
+    'text-git-closed': removed,
+    'text-git-conflicting': removed,
+    'text-git-merged': shade('pro', 600, 250),
+    'text-git-draft': muted,
+  }
+}
 
 /** The design-system colors made from a palette, and their contrast notes. */
 export const lookColors = (name: PaletteName): { colors: ThemeColors; problems: string[] } => {
@@ -29,14 +51,14 @@ export const lookColors = (name: PaletteName): { colors: ThemeColors; problems: 
     light: { gray: { anchors: anchors(p.light, 'light') } },
     dark: { gray: { anchors: anchors(p.dark, 'dark') } },
   })
-  // The four message colors go in after makeColors, which doesn't take them.
+  // The two message colors a mode go in after makeColors, which doesn't take them.
   const extra = messageColors(p)
   const colors: ThemeColors = {
     ...theme,
     inputs: {
       ...theme.inputs,
-      light: { ...theme.inputs?.light, ...extra.light },
-      dark: { ...theme.inputs?.dark, ...extra.dark },
+      light: { ...theme.inputs?.light, ...gitColors(theme.inputs?.light, p.light.muted, 'light'), ...extra.light },
+      dark: { ...theme.inputs?.dark, ...gitColors(theme.inputs?.dark, p.dark.muted, 'dark'), ...extra.dark },
     },
   }
   return { colors, problems }
