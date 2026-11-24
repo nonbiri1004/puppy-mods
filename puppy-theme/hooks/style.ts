@@ -6,8 +6,8 @@ import type { Palette } from './palette'
 // How the conversation's own rows look. The words stay the app's text.
 //
 // Three ways to draw your messages, picked in /look; replies stay plain on the
-// page in the app's own size, and tool rows are quiet code-font strips in a
-// small pixel frame in all three.
+// page in the app's own size, and tool rows are quiet code-font lines with no
+// box in all three.
 // Each drawing is a nine-slice: the corners draw once, a unit a point, and the
 // edges and middle stretch to fit the message.
 
@@ -96,24 +96,9 @@ const BOOKMARKED: ThemeMessageRule = {
 // opens, and a new size made every paragraph wrap again, so the page jumped.
 const ROWS: Omit<ThemeStyle, 'UserMessage'> = {
   Heading: { fontWeight: 'semibold' },
-  // a quiet code-font strip in a small pixel frame: a 1-point line, corners cut in
-  // 2-point steps like the message card's
-  ToolUse: {
-    color: 'text-secondary',
-    fontFamily: ['code'],
-    backgroundColor: 'surface-1',
-    paddingX: 8,
-    fill: {
-      vector: {
-        viewBox: 12,
-        slice: 4,
-        paths: [
-          { d: 'M2 0H10V2H12V10H10V12H2V10H0V2H2Z', color: 'border' },
-          { d: 'M2 1H10V2H11V10H10V11H2V10H1V2H2Z', color: 'surface-1' },
-        ],
-      },
-    },
-  },
+  // tool rows: quiet code-font lines in the secondary text color, with no box
+  // (a framed strip on every tool row was too big and too loud)
+  ToolUse: { color: 'text-secondary', fontFamily: ['code'] },
 }
 
 export const STYLES: Record<Exclude<MessageStyle, 'app'>, ThemeStyle> = {

@@ -53,16 +53,14 @@ const surfaces = (name: (typeof PALETTE_NAMES)[number], mode: 'light' | 'dark') 
   }
 }
 
-test('tool rows sit in a pixel frame, their words 3:1 on its line in every palette and mode', () => {
+test('tool rows are quiet code-font lines with no box, their words 4.5:1 on the wall', () => {
   for (const s of Object.values(STYLES)) {
-    expect(s.ToolUse).toMatchObject({ color: 'text-secondary', fill: { vector: { viewBox: 12, slice: 4 } } })
+    expect(s.ToolUse).toEqual({ color: 'text-secondary', fontFamily: ['code'] })
   }
   for (const name of PALETTE_NAMES) {
     for (const mode of ['light', 'dark'] as const) {
-      const p = paletteFor(name)[mode]
       const t = surfaces(name, mode)
-      expect(ratio(t.secondary, p.line)).toBeGreaterThanOrEqual(3)
-      expect(ratio(t.secondary, t.s[1]!)).toBeGreaterThanOrEqual(4.5)
+      expect(ratio(t.secondary, t.s[0]!)).toBeGreaterThanOrEqual(4.5)
     }
   }
 })
