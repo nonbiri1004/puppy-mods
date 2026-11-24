@@ -42,8 +42,13 @@ const gitColors = (inputs: ThemeColorInputs | undefined, muted: Hex, mode: 'ligh
   }
 }
 
+// lookColors is pure and every wear asks for it, so each palette is worked out once.
+const made = new Map<PaletteName, { colors: ThemeColors; problems: string[] }>()
+
 /** The design-system colors made from a palette, and their contrast notes. */
 export const lookColors = (name: PaletteName): { colors: ThemeColors; problems: string[] } => {
+  const known = made.get(name)
+  if (known !== undefined) return known
   const p = paletteFor(name)
   const { theme, problems } = makeColors({
     label: name === 'eyecare' ? 'lofi puppy · eye care' : 'lofi puppy · baibai',
@@ -52,7 +57,7 @@ export const lookColors = (name: PaletteName): { colors: ThemeColors; problems: 
     dark: { gray: { anchors: anchors(p.dark, 'dark') } },
   })
   // The two message colors a mode go in after makeColors, which doesn't take them.
-  const extra = messageColors(p)
+  const extra = messageColors(p, theme.inputs?.dark?.['gray-800'] ?? p.dark.card)
   const colors: ThemeColors = {
     ...theme,
     inputs: {
@@ -61,6 +66,7 @@ export const lookColors = (name: PaletteName): { colors: ThemeColors; problems: 
       dark: { ...theme.inputs?.dark, ...gitColors(theme.inputs?.dark, p.dark.muted, 'dark'), ...extra.dark },
     },
   }
+  made.set(name, { colors, problems })
   return { colors, problems }
 }
 

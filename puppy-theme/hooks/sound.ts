@@ -132,6 +132,6 @@ export const SOUNDS: Record<SoundSet, ThemeSound> = { lofi: LOFI, wood: WOOD, ra
 export const SOUND_LABEL: Record<SoundSet, string> = {
   lofi: 'lofi room · hum, vinyl, a far-off key',
   wood: 'wood · a fan and a marimba',
-  rain: 'rain · rain on the window, slow piano',
+  rain: 'rain · rain on the window, slow piano; the sky rains too',
   chip: '8-bit · little game sounds',
 }

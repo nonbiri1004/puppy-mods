@@ -1,7 +1,7 @@
 // the seven moments the desktop app plays a theme's cue
 export type CueName = 'send' | 'tool' | 'compact' | 'done' | 'ask' | 'error' | 'click'
 
-// baibai: the brand's own warm greys; eyecare: worked out from them, softer text and a warmer day wall
+// baibai: the brand's own warm greys; eyecare: worked out from them, softer text and a warmer light-mode wall
 export type PaletteName = 'baibai' | 'eyecare'
 
 // sky: the framed sky on the wall, following the time of day; plain: the wall color alone

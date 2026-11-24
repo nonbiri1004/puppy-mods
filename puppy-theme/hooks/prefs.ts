@@ -35,7 +35,7 @@ const isWall = (v: unknown): v is Wall => typeof v === 'string' && (WALLS as rea
  * know, or a value out of range, falls back to the default, and the rest stay.
  */
 export const parsePrefs = (raw: unknown): Prefs => {
-  const o = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
+  const o = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
   const cues = typeof o.cues === 'object' && o.cues !== null ? (o.cues as Record<string, unknown>) : {}
   return {
     on: typeof o.on === 'boolean' ? o.on : DEFAULT_PREFS.on,
@@ -52,4 +52,15 @@ export const parsePrefs = (raw: unknown): Prefs => {
       CUES.map(c => [c, typeof cues[c] === 'boolean' ? (cues[c] as boolean) : DEFAULT_PREFS.cues[c]]),
     ) as Prefs['cues'],
   }
+}
+
+/**
+ * The picks to store, with the fields of what was stored that this version
+ * doesn't know kept as they were: a session still on an older version, picking
+ * in its pane, doesn't wipe what a newer one added.
+ */
+export const keepUnknown = (raw: unknown, prefs: Prefs): Record<string, unknown> => {
+  const o = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  const cues = typeof o.cues === 'object' && o.cues !== null && !Array.isArray(o.cues) ? (o.cues as Record<string, unknown>) : {}
+  return { ...o, ...prefs, cues: { ...cues, ...prefs.cues } }
 }

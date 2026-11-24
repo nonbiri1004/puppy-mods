@@ -58,7 +58,7 @@ test('a session starts in what the pane kept', async ($, on) => {
   expect(logs).toEqual([])
 })
 
-test('with nothing kept, a session starts warm with the night sky', async ($, on) => {
+test('with nothing kept, a session starts with the default look (a day sky at noon)', async ($, on) => {
   const { sets } = engine(on, undefined)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   expect(sets[0]?.backdrop).toMatchObject({ scene: 'puppy-sky-baibai-day-clear' })
@@ -105,6 +105,7 @@ test('a build that refuses style or sound still gets colors and the backdrop', a
   expect(sets).toHaveLength(1)
   expect(sets[0]).toHaveProperty('colors')
   expect(sets[0]).not.toHaveProperty('style')
+  expect(sets[0]).toHaveProperty('backdrop')
   expect(JSON.stringify(logs)).toContain('colors only')
 })
 
@@ -167,11 +168,11 @@ test('the look turns off to the app\'s own and back, and reset brings the defaul
   await ui.unmount()
 })
 
-test('a session that kept the look off starts with no theme', async ($, on) => {
+test('a session that kept the look off starts with no theme, and clears no other mod\'s', async ($, on) => {
   const { sets, clears } = engine(on, { on: false })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   expect(sets).toHaveLength(0)
-  expect(clears()).toBe(1)
+  expect(clears()).toBe(0)
 })
 
 test('an open session takes picks another session stored, and the sky follows the hour', async ($, on) => {
@@ -206,4 +207,109 @@ test('an open session takes picks another session stored, and the sky follows th
   // 17:00 is dusk
   await clock.advance(5_000)
   expect(sets.at(-1)?.backdrop).toMatchObject({ scene: 'puppy-sky-baibai-dusk-clear' })
+})
+
+// An engine with a clock that moves only when the test says, for the watch.
+const watched = (on: Parameters<TestBody>[1], stored: unknown, at: Date) => {
+  const clock = mock.clock(on, { now: at.getTime() })
+  const store = new Map<string, unknown>(stored === undefined ? [] : [['prefs', stored]])
+  const sets: ThemeSetArgs[] = []
+  let clears = 0
+  on('store.get', (_, e) => ({ value: store.get(e.key) }))
+  on('store.set', (_, e) => {
+    store.set(e.key, e.value)
+    return { value: undefined }
+  })
+  on('theme.set', (_, e) => {
+    sets.push(e)
+    return { value: { isDrawn: true as const, requestId: 'test' } }
+  })
+  on('theme.clear', () => {
+    clears += 1
+    return { value: { isDrawn: false as const, reason: 'cleared' } }
+  })
+  on('ui.log', () => ({ value: undefined }))
+  on('command.register', () => ({ value: { command: 'look' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  return { clock, store, sets, clears: () => clears }
+}
+
+test('with the look off, the hour crossing wears nothing and clears nothing', async ($, on) => {
+  const { clock, sets, clears } = watched(on, { on: false }, new Date(2026, 10, 24, 16, 59, 50))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.advance(15_000)
+  expect(sets).toHaveLength(0)
+  expect(clears()).toBe(0)
+})
+
+test('with the plain wall, the hour crossing wears nothing new', async ($, on) => {
+  const { clock, sets } = watched(on, { wall: 'plain' }, new Date(2026, 10, 24, 16, 59, 50))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.advance(15_000)
+  expect(sets).toHaveLength(1)
+})
+
+test('a press in this session is worn once: the watch does not wear it again', async ($, on) => {
+  const { clock, sets } = watched(on, undefined, new Date(2026, 10, 24, 12, 0))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'messages-tape' })
+  expect(sets).toHaveLength(2)
+  await clock.advance(15_000)
+  expect(sets).toHaveLength(2)
+  await ui.unmount()
+})
+
+test('a press keeps what another session stored a moment ago', async ($, on) => {
+  const { store } = watched(on, undefined, new Date(2026, 10, 24, 12, 0))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  // another session picks eye care; this one has not seen it yet, then presses a cue
+  store.set('prefs', { ...(store.get('prefs') as object), colors: 'eyecare', font: 'from a newer version' })
+  await ui.press({ key: 'cue-tool' })
+  expect(store.get('prefs')).toMatchObject({ colors: 'eyecare', font: 'from a newer version', cues: { tool: false } })
+  await ui.unmount()
+})
+
+test('picks from another session show in this pane, and turning off there clears here once', async ($, on) => {
+  const { clock, store, sets, clears } = watched(on, undefined, new Date(2026, 10, 24, 12, 0))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  store.set('prefs', { messages: 'bookmark' })
+  await clock.advance(5_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(JSON.stringify(await ui.find({ key: 'messages-bookmark' }))).toContain('●')
+  await ui.unmount()
+
+  store.set('prefs', { messages: 'bookmark', on: false })
+  await clock.advance(15_000)
+  expect(clears()).toBe(1)
+  const worn = sets.length
+  store.set('prefs', { messages: 'bookmark', on: true })
+  await clock.advance(5_000)
+  expect(sets.length).toBe(worn + 1)
+  expect(clears()).toBe(1)
+})
+
+test('a round whose wear fails is tried again on the next', async ($, on) => {
+  const clock = mock.clock(on, { now: new Date(2026, 10, 24, 12, 0).getTime() })
+  const store = new Map<string, unknown>()
+  const sets: ThemeSetArgs[] = []
+  let refuse = false
+  on('store.get', (_, e) => ({ value: store.get(e.key) }))
+  on('theme.set', (_, e) => {
+    if (refuse) throw new Error('busy')
+    sets.push(e)
+    return { value: { isDrawn: true as const, requestId: 'test' } }
+  })
+  on('ui.log', () => ({ value: undefined }))
+  on('command.register', () => ({ value: { command: 'look' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  store.set('prefs', { messages: 'tape' })
+  refuse = true
+  await clock.advance(5_000)
+  refuse = false
+  await clock.advance(5_000)
+  expect(sets.at(-1)?.style?.UserMessage).toHaveLength(2)
 })

@@ -1,4 +1,4 @@
-// The backdrop: a plain warm-grey wall (paper in light mode, charcoal in dark) with
+// The backdrop: a plain warm-grey wall (paper in light mode, the card grey in dark) with
 // one small framed sky hung beside the sidebar, like the radio screen on
 // lofipuppy.app. Pixel art, crisp edges, slow motion, nothing flashes.
 //
@@ -9,7 +9,8 @@
 //   scene under 1364 px wide (or 320 tall): the wall alone, there is no room
 //   1364 to 1619: a slim upright frame, 24×96, at x 206
 //   1620 and up: the wide frame, 116×76, at x 217
-// Both frames: a 2 px edge, a 2 px inner line, a shadow 2 right and 4 down.
+// Both frames: a 2 px edge, a 2 px inner line, a shadow 2 right and 4 down
+// (the cord is 1 px on the slim frame, 2 px on the wide one).
 // (A folded sidebar with the pane open moves the text over the slim frame;
 // the API doesn't tell a backdrop that, so plain wall is the way out.)
 //
@@ -19,7 +20,7 @@
 import type { PaletteName } from '../types'
 
 import { night } from './brand-colors'
-import { paletteFor } from './palette'
+import { DUSK_VIOLET, paletteFor } from './palette'
 
 export type Period = 'dawn' | 'day' | 'dusk' | 'night'
 export type Weather = 'clear' | 'rain'
@@ -35,7 +36,7 @@ const SKY: Record<Weather, Record<Period, readonly [string, string]>> = {
   clear: {
     dawn: ['#2e2b28', '#8a8f9a'],
     day: ['#9aa3ad', '#c6c9cb'], // the bottom kept off the frame's inner line
-    dusk: ['#3a3f4a', '#7a7488'],
+    dusk: ['#3a3f4a', DUSK_VIOLET],
     night: [night.night, night.skyBottom],
   },
   rain: {
@@ -46,6 +47,8 @@ const SKY: Record<Weather, Record<Period, readonly [string, string]>> = {
   },
 }
 const STAR = night.nightText
+// The Low shades (and the rain night's bottom, #2b2926) are not brand colors:
+// each is its brand color a step darker, for the cloud's lower edge.
 const NEBULA = { warm: night.nebulaWarm, warmLow: '#3b3530', blue: night.nebulaBlue, blueLow: '#2b3036' }
 // Dusk's sky is lighter than the night's, so its nebula and planet are lighter
 // than the sky too (the night's colors there read as dark smudges).
@@ -56,7 +59,11 @@ const RAIN = '#b4bac1'
 const WINDOW = night.nightText
 // In dark mode a day sky is the brightest thing on the screen; a shade over it
 // (hidden in light mode) turns it to an overcast day that sits with the charcoal.
+// A clear dawn's lower half is as bright, so it takes a lighter one; with it,
+// the bottoms of dawn, day and dusk sit close (#757a83, #76787a, #7a7488).
+// The shade goes over the sky alone: the town and its windows stay on top.
 const DAY_SHADE = 0.4
+const DAWN_SHADE = 0.15
 const TOWN = night.night // the brand's night, warm like the clear night
 
 /** The scene names: one per palette, time of day and weather, so a change redraws (letters, digits and - only). */
@@ -147,7 +154,7 @@ const meteor = (w: number) => ([x, y, dx, dy]: readonly [number, number, number,
 
 // Rain: two stacked copies of the same streaks slide down one sky height, so it loops.
 // The streaks are 1 px on purpose, finer than the 2 px art; everything else sits on the 2 px grid.
-const rain = (l: Layout, period: Period): string => {
+const rain = (l: Layout, period: Period): { streaks: string; ground: string } => {
   const streaks: string[] = []
   const step = l.w > 40 ? 9 : 5
   for (let x = 1, i = 0; x < l.w; x += step, i++) {
@@ -166,12 +173,13 @@ const rain = (l: Layout, period: Period): string => {
   const windows = [0.2, 0.55, 0.8].map(
     (f, i) => rect(Math.round((f * l.w) / 2) * 2, l.h - 6, 2, 2, WINDOW, ` class="win" style="animation-delay:-${i * 3.7}s"`),
   )
-  return (
-    `<g class="rain-${l.w}" fill="${RAIN}" opacity=".45"><g>${one}</g><g transform="translate(0 -${l.h})">${one}</g></g>` +
-    `<style>.rain-${l.w}{animation:fall-${l.w} 7s linear infinite}@keyframes fall-${l.w}{from{transform:translateY(0)}to{transform:translateY(${l.h}px)}}` +
-    `.drop-${l.w}{animation-name:slide-${l.w}}@keyframes slide-${l.w}{0%{transform:translateY(0);opacity:.6}85%{opacity:.6}100%{transform:translateY(${l.h - 10}px);opacity:0}}</style>` +
-    town + windows.join('') + drops.join('')
-  )
+  return {
+    streaks:
+      `<g class="rain-${l.w}" fill="${RAIN}" opacity=".45"><g>${one}</g><g transform="translate(0 -${l.h})">${one}</g></g>` +
+      `<style>.rain-${l.w}{animation:fall-${l.w} 7s linear infinite}@keyframes fall-${l.w}{from{transform:translateY(0)}to{transform:translateY(${l.h}px)}}` +
+      `.drop-${l.w}{animation-name:slide-${l.w}}@keyframes slide-${l.w}{0%{transform:translateY(0);opacity:.6}85%{opacity:.6}100%{transform:translateY(${l.h - 10}px);opacity:0}}</style>`,
+    ground: town + windows.join('') + drops.join(''),
+  }
 }
 
 const sky = (l: Layout, period: Period, weather: Weather): string => {
@@ -181,14 +189,19 @@ const sky = (l: Layout, period: Period, weather: Weather): string => {
     `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient></defs>`,
     rect(0, 0, l.w, l.h, `url(#${id})`),
   ]
-  if (weather === 'rain') {
-    parts.push(rain(l, period))
+  const wet = weather === 'rain' ? rain(l, period) : undefined
+  if (wet !== undefined) {
+    parts.push(wet.streaks)
   } else if (period === 'day') {
     parts.push(`<g class="cloud" fill="${CLOUD}" opacity=".7">${l.clouds.map(([x, y, w]) => rect(x, y, w, 2) + rect(x + 2, y - 2, w - 4, 2)).join('')}</g>`)
   }
   if (period === 'day') {
     parts.push(rect(0, 0, l.w, l.h, '#000', ' class="day-shade"'))
-  } else if (weather === 'clear') {
+  } else if (period === 'dawn' && weather === 'clear') {
+    parts.push(rect(0, 0, l.w, l.h, '#000', ' class="dawn-shade"'))
+  }
+  if (wet !== undefined) parts.push(wet.ground)
+  if (weather === 'clear' && period !== 'day') {
     // dawn: a few last stars only; dusk: a light nebula and planet; night: all of it
     const shown = period === 'night' ? l.stars : period === 'dusk' ? l.stars.slice(0, 4) : l.stars.slice(0, 2)
     if (period === 'night') {
@@ -215,10 +228,10 @@ export const drawScene = (palette: PaletteName = 'baibai', period: Period = 'nig
     `<style>`,
     `.wall{fill:${l.wall}}`,
     `.frame{fill:${l.edge}}.frame-in{fill:${l.line}}.shade{fill:${l.text};opacity:.08}`,
-    `.cord{stroke:${l.edge}}.nail{fill:${l.muted}}.day-shade{opacity:0}.town-day{fill:${l.muted}}`,
+    `.cord{stroke:${l.edge}}.nail{fill:${l.muted}}.day-shade,.dawn-shade{opacity:0}.town-day{fill:${l.muted}}`,
     `@media (prefers-color-scheme: dark){`,
     `.wall{fill:${d.card}}.frame{fill:${d.edge}}.frame-in{fill:${d.line}}.shade{fill:#000;opacity:.25}`,
-    `.cord{stroke:${d.edge}}.nail{fill:${d.muted}}.day-shade{opacity:${DAY_SHADE}}.town-day{fill:${TOWN}}}`,
+    `.cord{stroke:${d.edge}}.nail{fill:${d.muted}}.day-shade{opacity:${DAY_SHADE}}.dawn-shade{opacity:${DAWN_SHADE}}.town-day{fill:${TOWN}}}`,
     `.slim,.wide{display:none}`,
     `@media (min-width: 1364px) and (max-width: 1619px) and (min-height: 320px){.slim{display:inline}}`,
     `@media (min-width: 1620px) and (min-height: 320px){.wide{display:inline}}`,
