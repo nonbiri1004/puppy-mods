@@ -204,6 +204,10 @@ const sky = (l: Layout, period: Period, weather: Weather): string => {
 
 export const drawScene = (palette: PaletteName = 'baibai', period: Period = 'night', weather: Weather = 'clear'): string => {
   const { light: l, dark: d } = paletteFor(palette)
+  // The middle panel is see-through over the sky, so it shows this wall. In dark
+  // mode the plain wall's middle panel is the card (#232321), and the charcoal
+  // wall (#191917) read far darker there; so the dark sky wall is the card too.
+  // In light mode the wall stays the brand's paper grey.
   const slim = sky(SLIM, period, weather).replace('<svg ', '<svg x="210" y="88" ')
   const wide = sky(WIDE, period, weather).replace('<svg ', '<svg x="221" y="98" ')
   return [
@@ -213,7 +217,7 @@ export const drawScene = (palette: PaletteName = 'baibai', period: Period = 'nig
     `.frame{fill:${l.edge}}.frame-in{fill:${l.line}}.shade{fill:${l.text};opacity:.08}`,
     `.cord{stroke:${l.edge}}.nail{fill:${l.muted}}.day-shade{opacity:0}.town-day{fill:${l.muted}}`,
     `@media (prefers-color-scheme: dark){`,
-    `.wall{fill:${d.wall}}.frame{fill:${d.edge}}.frame-in{fill:${d.line}}.shade{fill:#000;opacity:.25}`,
+    `.wall{fill:${d.card}}.frame{fill:${d.edge}}.frame-in{fill:${d.line}}.shade{fill:#000;opacity:.25}`,
     `.cord{stroke:${d.edge}}.nail{fill:${d.muted}}.day-shade{opacity:${DAY_SHADE}}.town-day{fill:${TOWN}}}`,
     `.slim,.wide{display:none}`,
     `@media (min-width: 1364px) and (max-width: 1619px) and (min-height: 320px){.slim{display:inline}}`,
