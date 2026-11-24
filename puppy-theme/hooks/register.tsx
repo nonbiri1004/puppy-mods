@@ -37,16 +37,13 @@ const CUE_LABEL: Record<CueName, string> = {
 // The local hour, for the sky's time of day.
 const hourNow = async ($: EngineInterface): Promise<number> => new Date(await $.clock.now()).getHours()
 
-const wear = async ($: EngineInterface, prefs: Prefs): Promise<void> => {
+// The look goes on first; the paint check is only a note, so it runs after.
+const wear = async ($: EngineInterface, prefs: Prefs, known?: number): Promise<void> => {
   if (!prefs.on) {
     await $.theme.clear()
     return
   }
-  const problem = unpainted(lookColors(prefs.colors).problems)
-  if (problem !== undefined) {
-    $.ui.log(`puppy-theme: ${problem}`)
-  }
-  const hour = await hourNow($)
+  const hour = known ?? (await hourNow($))
   let set
   try {
     set = await $.theme.set(lookFor(prefs, hour))
@@ -56,6 +53,10 @@ const wear = async ($: EngineInterface, prefs: Prefs): Promise<void> => {
   }
   if (!set.isDrawn) {
     $.ui.log(`puppy-theme: not drawn (${set.reason})`)
+  }
+  const problem = unpainted(lookColors(prefs.colors).problems)
+  if (problem !== undefined) {
+    $.ui.log(`puppy-theme: ${problem}`)
   }
 }
 
@@ -72,14 +73,21 @@ let sky: { cancel: () => void } | undefined
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'look', description: "pick the puppy's wall, message style and sounds" })
-    const prefs = parsePrefs(await $.store.get(STORE_KEY))
-    await update($, prefsAtom, () => prefs)
-    await wear($, prefs)
+    // Each session shows the app's own look until this runs, so the look goes on
+    // as soon as the picks and the hour are read; the command and the pane's copy
+    // of the picks are set up alongside, not before.
+    const [kept, now] = await Promise.all([$.store.get(STORE_KEY), $.clock.now()])
+    const prefs = parsePrefs(kept)
+    const hour = new Date(now).getHours()
+    await Promise.all([
+      wear($, prefs, hour),
+      $.command.register({ name: 'look', description: "pick the puppy's wall, message style and sounds" }),
+      update($, prefsAtom, () => prefs),
+    ])
     // The sky follows the time of day: look once a minute, and wear the look
     // again only when the hour crosses into dawn, day, dusk or night.
     sky?.cancel()
-    let period = periodOf(await hourNow($))
+    let period = periodOf(hour)
     sky = $.clock.every(60_000, () => {
       void (async () => {
         const now = periodOf(await hourNow($))
