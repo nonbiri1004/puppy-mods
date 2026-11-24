@@ -59,7 +59,7 @@ then open the desktop app's code tab: the look draws there.
 
 ## what you do
 
-- **open the settings**: `/look`. every pick is worn at once and kept on this computer, for every session.
+- **open the settings**: `/look`. every pick is worn at once and kept on this computer, for every session; sessions already open take it within a few seconds.
 - **colors**: **baibai** is the lofi puppy's own warm greys, paper grey in light mode and warm charcoal in dark mode, exactly as the brand gives them. **eye care** is worked out from those: softer text, and a warmer, slightly deeper wall in light mode. the git status colors come from the same family: no bright system colors, no orange.
 - **wall**: a small framed sky hung beside the sidebar, where the right pane doesn't cover it while the sidebar is open (a slim upright frame, or a wide one on big screens), or the plain wall color. the sky follows your local time: grey-blue dawn, a pale day with slow clouds, a violet dusk with a few stars, and the brand's night screen with twinkling pixel stars and a shooting star now and then. with the **rain** sounds picked, it rains over a small town. in dark mode a day sky is shaded to an overcast grey, so it doesn't glare; in light mode the town under a day rain is a soft grey, not black. on a small window the frame stays hidden; with the sidebar folded and the pane open it can sit under the words, and **plain wall** is the way out.
 - **glass**: how the panels sit over the framed sky. **frosted** blurs the frame a little, as if behind glass; **clear**, the default, shows it sharp. neither tints the panels: the veil is 5% in both, one step at most. with the plain wall there is nothing behind the panels, so it waits for the sky.
