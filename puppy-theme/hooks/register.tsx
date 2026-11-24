@@ -50,8 +50,11 @@ const wear = async ($: EngineInterface, prefs: Prefs, known?: number): Promise<v
     $.ui.log(`puppy-theme: style or sound refused, colors only (${String(error)})`)
     set = await $.theme.set(baseLook(prefs, hour))
   }
+  // Not drawn yet is normal when the session starts before the app's window
+  // attaches (after a restart, in the background, in a side chat): the theme
+  // stands and draws when it attaches. So the line goes to the debug log only.
   if (!set.isDrawn) {
-    $.ui.log(`puppy-theme: not drawn (${set.reason})`)
+    $.ui.log(`puppy-theme: not drawn (${set.reason})`, { to: 'debug' })
   }
   const problem = unpainted(lookColors(prefs.colors).problems)
   if (problem !== undefined) {

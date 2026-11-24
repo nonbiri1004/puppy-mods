@@ -64,6 +64,24 @@ test('with nothing kept, a session starts warm with the night sky', async ($, on
   expect(sets[0]?.backdrop).toMatchObject({ scene: 'puppy-sky-baibai-day-clear' })
 })
 
+test('a theme not drawn yet writes to the debug log only, not the chat', async ($, on) => {
+  const logs: { text: string; to?: string }[] = []
+  on('store.get', () => ({ value: undefined }))
+  on('ui.log', (_, e) => {
+    logs.push(e)
+    return { value: undefined }
+  })
+  on('theme.set', () => ({ value: { isDrawn: false as const, reason: 'no attached desktop client yet' } }))
+  on('clock.now', () => ({ value: new Date(2026, 10, 24, 12, 0).getTime() }))
+  on('clock.every', () => ({ deny: 'no timers in tests' }))
+  on('command.register', () => ({ value: { command: 'look' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  const notDrawn = logs.filter(l => l.text.includes('not drawn'))
+  expect(notDrawn).toHaveLength(1)
+  expect(notDrawn[0]?.to).toBe('debug')
+})
+
 test('a build that refuses style or sound still gets colors and the backdrop', async ($, on) => {
   const sets: Record<string, unknown>[] = []
   const logs: unknown[] = []
