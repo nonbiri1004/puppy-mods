@@ -1,0 +1,19 @@
+{
+  "name": "puppy-theme",
+  "version": "0.1.0",
+  "description": "the lofi puppy's look for the desktop app: warm grey colors, a small framed sky that follows the time of day, pixel message cards and soft sounds. /look picks each part",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "lofi puppy",
+    "url": "https://github.com/nonbiri1004"
+  },
+  "homepage": "https://github.com/nonbiri1004/puppy-mods/tree/main/puppy-theme",
+  "repository": "https://github.com/nonbiri1004/puppy-mods",
+  "license": "MIT",
+  "keywords": [
+    "theme",
+    "look",
+    "puppy",
+    "lofi"
+  ]
+}
