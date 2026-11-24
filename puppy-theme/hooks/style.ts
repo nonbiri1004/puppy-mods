@@ -6,8 +6,8 @@ import type { Palette } from './palette'
 // How the conversation's own rows look. The words stay the app's text.
 //
 // Three ways to draw your messages, picked in /look; replies stay plain on the
-// page, a little airier, and tool rows are quiet code-font strips in a small
-// pixel frame in all three.
+// page in the app's own size, and tool rows are quiet code-font strips in a
+// small pixel frame in all three.
 // Each drawing is a nine-slice: the corners draw once, a unit a point, and the
 // edges and middle stretch to fit the message.
 
@@ -89,8 +89,9 @@ const BOOKMARKED: ThemeMessageRule = {
   },
 }
 
+// No Text size or line height: the look goes on a moment after a session
+// opens, and a new size made every paragraph wrap again, so the page jumped.
 const ROWS: Omit<ThemeStyle, 'UserMessage'> = {
-  Text: { fontSize: 15, lineHeight: 24 },
   Heading: { fontWeight: 'semibold' },
   // a quiet code-font strip in a small pixel frame: corners cut one point a step
   ToolUse: {

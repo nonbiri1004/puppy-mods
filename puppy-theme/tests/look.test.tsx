@@ -185,6 +185,10 @@ test('under a day sky the town is the muted grey in light mode and stays dark in
   expect(drawScene('baibai', 'night', 'rain')).not.toContain('class="town-day"')
 })
 
+test('the body text keeps the app size, so the page does not jump when the look goes on', () => {
+  for (const style of Object.values(STYLES)) expect(style.Text).toBeUndefined()
+})
+
 test('the look follows each pick', () => {
   const full = lookFor(DEFAULT_PREFS)
   expect(full.backdrop).toMatchObject({ scene: sceneName('baibai', 'night', 'clear'), glass: GLASS.clear })
