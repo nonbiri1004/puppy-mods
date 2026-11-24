@@ -14,7 +14,7 @@ const PANE = 'look'
 const prefsAtom = atom({ plugin: 'puppy-theme', key: 'prefs' } as const, DEFAULT_PREFS)
 
 const PALETTE_LABEL: Record<PaletteName, string> = { baibai: 'baibai · the brand greys', eyecare: 'eye care · softer text' }
-const WALL_LABEL: Record<Wall, string> = { sky: 'night sky frame', plain: 'plain wall' }
+const WALL_LABEL: Record<Wall, string> = { sky: 'framed sky', plain: 'plain wall' }
 const MESSAGE_LABEL: Record<MessageStyle, string> = {
   pixel: 'pixel card with a tail',
   tape: 'taped paper notes',
@@ -151,7 +151,7 @@ export const register: Register = on => {
             <Text dimColor>{WALL_LABEL[prefs.wall]}</Text>
           </Box>
           {WALLS.map(w => choice(`wall-${w}`, prefs.wall === w, WALL_LABEL[w], () => pick($, p => ({ ...p, wall: w }))))}
-          {toggle('glass', prefs.glass, 'frosted glass', prefs.wall === 'sky' ? 'off: the sky shows clear' : 'for the night sky', () =>
+          {toggle('glass', prefs.glass, 'frosted glass', prefs.wall === 'sky' ? 'off: the sky shows clear' : 'for the framed sky', () =>
             pick($, p => ({ ...p, glass: !p.glass })),
           )}
         </Box>

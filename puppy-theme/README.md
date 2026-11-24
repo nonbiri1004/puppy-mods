@@ -15,8 +15,8 @@ look                                         kept on this computer
 │ ○ eye care · softer text                    │
 ╰─────────────────────────────────────────────╯
 ╭─────────────────────────────────────────────╮
-│ wall                       night sky frame  │
-│ ● night sky frame                           │
+│ wall                            framed sky  │
+│ ● framed sky                                │
 │ ○ plain wall                                │
 │ ☑  frosted glass   off: the sky shows clear │
 ╰─────────────────────────────────────────────╯
@@ -54,7 +54,7 @@ then open the desktop app's code tab: the look draws there.
 
 - **open the settings**: `/look`. every pick is worn at once and kept on this computer, for every session.
 - **colors**: **baibai** is the lofi puppy's own warm greys, paper grey by day and warm charcoal by night, exactly as the brand gives them. **eye care** is worked out from those: softer text, and a warmer, slightly deeper wall by day. both follow light and dark mode.
-- **wall**: a small framed sky hung beside the sidebar, where the right pane never covers it (a slim upright frame, or a wide one on big screens), or the plain wall color. the sky follows your local time: grey-blue dawn, a pale day with slow clouds, a violet dusk, and night with twinkling pixel stars and a shooting star now and then. with the **rain** sounds picked, it rains in the frame. on a small window the frame stays hidden; with the sidebar folded and the pane open it can sit under the words, and **plain wall** is the way out. **frosted glass** puts a light blur and a thin veil on the panels over the sky, so words stay easy to read; off lets the sky show through clear.
+- **wall**: a small framed sky hung beside the sidebar, where the right pane never covers it (a slim upright frame, or a wide one on big screens), or the plain wall color. the sky follows your local time: grey-blue dawn, a pale day with slow clouds, a violet dusk, and night with twinkling pixel stars and a shooting star now and then. with the **rain** sounds picked, it rains in the frame. on a small window the frame stays hidden; with the sidebar folded and the pane open it can sit under the words, and **plain wall** is the way out. **frosted glass** puts a thin veil and a faint blur on the panels over the sky, so words stay easy to read; off lets the sky show through clear.
 - **messages**: how your messages are drawn: a small pixel card with a stepped tail, paper notes held by grey tape (two take turns, tilted a little), or a card with a slate blue bookmark strip. replies get a little more room between lines and tool rows are quiet code-font strips in a small pixel frame in all three. **the app's own rows** turns the message style off.
 - **look on or off**: off shows the app as it comes, and keeps your picks for when you turn it back on. **back to the puppy's defaults** resets every pick.
 - **sounds**: pick one of four sets, and turn each of the seven moments on or off. the sounds play only once you press the speaker in the session's title bar.

@@ -4,7 +4,7 @@ export type CueName = 'send' | 'tool' | 'compact' | 'done' | 'ask' | 'error' | '
 // baibai: the brand's own warm greys; eyecare: worked out from them, softer text and a warmer day wall
 export type PaletteName = 'baibai' | 'eyecare'
 
-// sky: the framed night sky on the wall; plain: the wall color alone
+// sky: the framed sky on the wall, following the time of day; plain: the wall color alone
 export type Wall = 'sky' | 'plain'
 
 // how your messages are drawn: pixel card with a tail, taped paper note, card with a bookmark strip,
@@ -20,7 +20,7 @@ export type Prefs = {
   on: boolean
   colors: PaletteName
   wall: Wall
-  // frosted glass on the panels over the night sky; off lets the sky show through clear
+  // frosted glass on the panels over the framed sky; off lets the sky show through clear
   glass: boolean
   // the message style; 'app' keeps the app's own rows
   messages: MessageStyle
