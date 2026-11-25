@@ -332,7 +332,7 @@ export const register: Register = on => {
           </Box>
           <Box flexShrink={0} width={Input ? 8 : 5} flexDirection="row" justifyContent="flex-end" gap={1}>
             <Box>
-              <Button key={`pin-${i.id}`} label={isPinned ? '★' : '☆'} plain dimColor onPress={() => press($, i.id, isPinned ? 'unpin' : 'pin')} />
+              <Button key={`pin-${i.id}`} label="📌" plain dimColor={!isPinned} onPress={() => press($, i.id, isPinned ? 'unpin' : 'pin')} />
             </Box>
             {Input ? (
               <Box>
