@@ -51,8 +51,8 @@ export type Schedule = { job: string; startedAt: number | null; endedAt: number 
 export type ScheduleState = 'ok' | 'failed' | 'running' | 'late'
 
 // A pipeline that needs a look: stopped on an error, quiet past its stale_after_sec, or (the live
-// stream) restarting. `updated` is when its file was last written.
-export type PipelineAlarm = { file: string; title: string; headline: string; updated: number; kind: 'error' | 'quiet' | 'restarts' }
+// stream) restarting. `updated` is when its file was last written (null: its "updated" is broken).
+export type PipelineAlarm = { file: string; title: string; headline: string; updated: number | null; kind: 'error' | 'quiet' | 'restarts' }
 
 // A file the pane passed over, and why.
 export type Problem = { file: string; reason: string }

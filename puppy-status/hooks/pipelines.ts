@@ -10,18 +10,23 @@ export const LIVE_RESTART_LIMIT = 1
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
+// A file in the status folder that is not a pipeline's: passed over, never kept from a last read.
+export class NotPipeline extends Error {}
+
 // One status file's alarm, or null when it needs no look. A file that is not a pipeline-status
-// file throws, with the reason.
+// file throws NotPipeline; one that is not json throws SyntaxError. A pipeline in error shows even
+// with a broken "updated" (with no age then).
 export function alarmOf(file: string, text: string, now: number): PipelineAlarm | null {
   const v: unknown = JSON.parse(text)
-  if (!isObject(v) || v.format !== 'pipeline-status') throw new Error('not a pipeline-status file')
+  if (!isObject(v) || v.format !== 'pipeline-status') throw new NotPipeline('not a pipeline-status file')
   const pipeline = str(v.pipeline)
-  const updated = Date.parse(str(v.updated))
-  if (!pipeline || Number.isNaN(updated)) throw new Error('no "pipeline" or "updated"')
+  if (!pipeline) throw new NotPipeline('no "pipeline"')
+  const parsed = Date.parse(str(v.updated))
+  const updated = Number.isNaN(parsed) ? null : parsed
   const base = { file, title: str(v.title) || pipeline, headline: str(v.headline), updated }
   if (v.state === 'error') return { ...base, kind: 'error' }
   const stale = typeof v.stale_after_sec === 'number' && v.stale_after_sec > 0 ? v.stale_after_sec * 1000 : null
-  if (stale != null && now - updated > stale) return { ...base, kind: 'quiet' }
+  if (stale != null && updated != null && now - updated > stale) return { ...base, kind: 'quiet' }
   const restarts = pipeline === 'live' && isObject(v.detail) && typeof v.detail.restarts_24h === 'number' ? v.detail.restarts_24h : 0
   if (restarts > LIVE_RESTART_LIMIT) {
     const exit = isObject(v.detail) && typeof v.detail.last_exit === 'number' ? `，上次結束碼 ${v.detail.last_exit}` : ''

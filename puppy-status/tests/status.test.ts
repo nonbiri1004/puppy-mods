@@ -15,7 +15,7 @@ test('a start line may name the folder it ran in', () => {
 test('a log\'s lines give each job its last start and end; other lines are passed over', () => {
   const runs = runsOf([
     '===== 2026-11-22 20:11:34 daily 開始（/somewhere）',
-    '--- 2026-11-22 20:11:34 python3 dispatch.py scan',
+    '--- 2026-11-22 20:11:34 step one',
     '===== 2026-11-22 20:11:34 daily 結束：成功',
     '===== 2026-11-24 09:00:00 daily 開始',
     '===== 2026-11-24 09:00:05 daily 結束：有錯誤',
@@ -23,9 +23,16 @@ test('a log\'s lines give each job its last start and end; other lines are passe
   expect(runs).toEqual([{ job: 'daily', startedAt: new Date(2026, 10, 24, 9, 0, 0).getTime(), endedAt: new Date(2026, 10, 24, 9, 0, 5).getTime(), isOk: false }])
 })
 
-test('"every" reads m, h and d, with or without = or :', () => {
-  expect(everyOf('daily 1d, weekly=7d; watch:90m hourly 2h')).toEqual({ daily: DAY, weekly: 7 * DAY, watch: 90 * 60_000, hourly: 2 * HOUR })
-  expect(everyOf('')).toEqual({})
+test('"every" reads m, h, d and w, with or without = or :; what it can\'t read is given back', () => {
+  expect(everyOf('daily 1d, weekly=1w; watch:90m, 日報 2h')).toEqual({ every: { daily: DAY, weekly: 7 * DAY, watch: 90 * 60_000, 日報: 2 * HOUR }, unread: [] })
+  expect(everyOf('')).toEqual({ every: {}, unread: [] })
+  expect(everyOf('daily 1d, watch 90min, oops').unread).toEqual(['watch 90min', 'oops'])
+})
+
+test('a start in the same second as the last end is a new run, still going', () => {
+  const [run] = runsOf('===== 2026-11-25 11:59:30 w 結束：成功\n===== 2026-11-25 11:59:30 w 開始\n')
+  expect(run).toMatchObject({ endedAt: null, isOk: null })
+  expect(scheduleState({ ...run!, everyMs: null }, T)).toBe('running')
 })
 
 test('a job is late past its every and the grace, broken when it failed or never ended, else running or ok', () => {
@@ -35,6 +42,8 @@ test('a job is late past its every and the grace, broken when it failed or never
   expect(scheduleState(s({ startedAt: T - DAY - LATE_GRACE_MS + 1000, endedAt: T - DAY }), T)).toBe('ok')
   expect(scheduleState(s({ startedAt: T - DAY - LATE_GRACE_MS - 1000, endedAt: T - DAY }), T)).toBe('late')
   expect(scheduleState(s({ endedAt: null, isOk: null }), T)).toBe('running')
+  // a run still going is running, even past its every
+  expect(scheduleState(s({ startedAt: T - 4 * HOUR, endedAt: null, isOk: null, everyMs: HOUR }), T)).toBe('running')
   expect(scheduleState(s({ startedAt: T - RUN_MAX_MS - 1000, endedAt: null, isOk: null, everyMs: null }), T)).toBe('failed')
   // no every: never late
   expect(scheduleState(s({ startedAt: T - 30 * DAY, endedAt: T - 30 * DAY, everyMs: null }), T)).toBe('ok')
@@ -58,6 +67,8 @@ test('a pipeline needs a look only on an error, past its own stale time, or rest
   // restarts_24h is read for the live stream only
   expect(alarmOf('p.json', file({ detail: { restarts_24h: 5 } }), T)).toBeNull()
   expect(() => alarmOf('x.json', '{"format": "session-status"}', T)).toThrow('not a pipeline-status file')
+  // in error with a broken "updated": still shown, with no age
+  expect(alarmOf('p.json', file({ state: 'error', updated: 'x' }), T)).toMatchObject({ kind: 'error', updated: null })
   expect(() => alarmOf('x.json', '{"format": "pipeline-sta', T)).toThrow(SyntaxError)
 })
 

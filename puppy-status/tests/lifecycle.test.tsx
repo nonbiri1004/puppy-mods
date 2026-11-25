@@ -374,6 +374,26 @@ test('puppy-sessions\' files are copied first; puppy-console\'s fill in only the
   expect(w.store.get('migrated:puppy-sessions')).toBe(true)
 })
 
+test('a copy that fails is said in the pane and tried again at the next start', async ($, on) => {
+  const { w, clock } = conversation(on)
+  w.written['/home/me/.claude/puppy-sessions/a.json'] = 'sessions a'
+  w.isWriteBroken = true
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.settle()
+  expect(w.store.get('migrated:puppy-sessions')).toBeUndefined()
+  let ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: /^舊名的對話檔沒搬完，下次啟動再試：/ })).toBeTruthy()
+  await ui.unmount()
+  w.isWriteBroken = false
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.settle()
+  expect(w.written['/home/me/.claude/puppy-status/a.json']).toBe('sessions a')
+  expect(w.store.get('migrated:puppy-sessions')).toBe(true)
+  ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: /沒搬完/ })).toBeFalsy()
+  await ui.unmount()
+})
+
 test('no old folder: nothing to copy, and it counts as done', async ($, on) => {
   const { w, clock } = conversation(on)
   const stored = w.store

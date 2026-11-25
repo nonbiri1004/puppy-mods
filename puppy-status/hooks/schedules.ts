@@ -30,8 +30,12 @@ export function runsOf(text: string): Run[] {
     const job = m[7]!
     const run = jobs.get(job) ?? { job, startedAt: null, endedAt: null, isOk: null }
     const at = localTime(m)
-    if (m[8]!.startsWith('開始')) run.startedAt = at
-    else {
+    if (m[8]!.startsWith('開始')) {
+      // a new run: an end before it was the last run's, even one in the same second
+      run.startedAt = at
+      run.endedAt = null
+      run.isOk = null
+    } else {
       run.endedAt = at
       run.isOk = m[9] === '成功'
     }
@@ -40,12 +44,19 @@ export function runsOf(text: string): Run[] {
   return [...jobs.values()]
 }
 
-// "daily 1d, weekly 7d" (or "daily=1d") → { daily: 1 day, weekly: 7 days }. m, h and d.
-export function everyOf(setting: string): Record<string, number> {
-  const unit: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 }
-  const out: Record<string, number> = {}
-  for (const m of setting.matchAll(/([\w.-]+)\s*[=:]?\s*(\d+(?:\.\d+)?)\s*([mhd])\b/g)) out[m[1]!] = Number(m[2]) * unit[m[3]!]!
-  return out
+// "daily 1d, weekly 7d" (or "daily=1d") → { daily: 1 day, weekly: 7 days }; m, h, d and w. A job's
+// name is anything but spaces, as in the logs. Pieces it can't read are given back, so the pane
+// can say so instead of a job that is never late.
+export function everyOf(setting: string): { every: Record<string, number>; unread: string[] } {
+  const unit: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000, w: 7 * 86_400_000 }
+  const every: Record<string, number> = {}
+  const unread: string[] = []
+  for (const piece of setting.split(/[,;\n]/).map(p => p.trim()).filter(Boolean)) {
+    const m = piece.match(/^(\S+?)\s*[=:]?\s*(\d+(?:\.\d+)?)\s*([mhdw])$/)
+    if (m) every[m[1]!] = Number(m[2]) * unit[m[3]!]!
+    else unread.push(piece)
+  }
+  return { every, unread }
 }
 
 // The runs of every log, one per job (a job in two logs keeps its newest start), with its "every".
@@ -60,14 +71,14 @@ export function schedulesOf(runs: Run[], every: Record<string, number>): Schedul
     .sort((a, b) => a.job.localeCompare(b.job))
 }
 
-// One word for a job, the worst first: late (it should have run again by now), broken (the last
-// run failed, or started long ago and never ended), running, ok.
+// One word for a job: running while a run is open (not yet six hours old); else late (it should
+// have started again by now), broken (the last run failed, or never ended), ok.
 export function scheduleState(s: Schedule, now: number): ScheduleState {
+  const isOpen = s.startedAt != null && s.endedAt == null
+  if (isOpen && now - s.startedAt! <= RUN_MAX_MS) return 'running'
   const last = s.startedAt ?? s.endedAt
   if (s.everyMs != null && last != null && now - last > s.everyMs + LATE_GRACE_MS) return 'late'
-  const isOpen = s.startedAt != null && (s.endedAt == null || s.endedAt < s.startedAt)
-  if (isOpen) return now - s.startedAt! > RUN_MAX_MS ? 'failed' : 'running'
-  return s.isOk === false ? 'failed' : 'ok'
+  return isOpen || s.isOk === false ? 'failed' : 'ok'
 }
 
 export const SCHEDULE_WORD: Record<ScheduleState, string> = { ok: '成功', failed: '有錯誤', running: '跑中', late: '該跑沒跑' }

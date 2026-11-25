@@ -8,7 +8,7 @@ import {
   ago, APP_SESSIONS, cleanPrompt, firstSentence, folderName, groupKeys, idle, isBrief, isSideChatTitle, isWrapUp, KEEP_WAITING_MS, nameOf, OLD_SESSIONS, oneLine,
   parseConversation, plain, plainLine, promptName, questionOf, recent, rowName, SESSIONS, shownState, sourceOf, stateWord, taskOf, waited, wrapOf,
 } from './sessions'
-import { ALARM_WORD, alarmOf, expandHome } from './pipelines'
+import { ALARM_WORD, alarmOf, expandHome, NotPipeline } from './pipelines'
 import { everyOf, LOG_TAIL_BYTES, runsOf, SCHEDULE_WORD, scheduleState, schedulesOf } from './schedules'
 import { claudeLimits, CODEX_LIMIT, CODEX_LOCK, CODEX_SESSIONS, CODEX_TAIL_BYTES, codexLimits, limitText, LOCK_OLD_MS, lockOf, readText } from './usage'
 
@@ -159,20 +159,28 @@ async function loadUsage($: EngineInterface, home: string): Promise<Usage> {
 // The folders typed in the settings. Empty: that card is off.
 type Folders = { statusDir: string; scheduleLogs: string; scheduleEvery: string }
 
-// Each job's last run, from the end of every *.log in the schedule logs folder.
-async function loadSchedules($: EngineInterface, dir: string, every: string): Promise<Schedule[]> {
+// Each job's last run, from the end of every *.log in the schedule logs folder. A log that can't
+// be read is named in `errors` and the other jobs still show; so are pieces of "schedule every"
+// it can't read.
+async function loadSchedules($: EngineInterface, dir: string, setting: string, errors: string[]): Promise<Schedule[]> {
   const runs = []
   for (const f of await $.fs.list(dir)) {
     if (f.kind !== 'file' || !f.name.endsWith('.log') || f.name.startsWith('.') || !f.size) continue
     const offset = Math.max(0, f.size - LOG_TAIL_BYTES)
-    runs.push(...runsOf(await $.fs.read(`${dir}/${f.name}`, { offset, length: f.size - offset })))
+    try {
+      runs.push(...runsOf(await $.fs.read(`${dir}/${f.name}`, { offset, length: f.size - offset })))
+    } catch (err) {
+      errors.push(`讀不到 ${f.name}：${errorText(err)}`)
+    }
   }
-  return schedulesOf(runs, everyOf(every))
+  const { every, unread } = everyOf(setting)
+  if (unread.length) errors.push(`schedule every 看不懂：${unread.join('、')}（寫成 daily 1d，單位 m h d w）`)
+  return schedulesOf(runs, every)
 }
 
 // The pipelines that need a look, from every *.json in the status folder. A file caught halfway
-// through a write (or a sync's half copy) keeps what the last read said; a file of another format
-// is not a pipeline's and is passed over.
+// through a write, a sync's half copy or a file that can't be read this minute keeps what the last
+// read said; a file of another format is not a pipeline's and is passed over.
 const alarmCache = new Map<string, PipelineAlarm | null>()
 async function loadAlarms($: EngineInterface, dir: string, now: number): Promise<PipelineAlarm[]> {
   const out: PipelineAlarm[] = []
@@ -183,7 +191,7 @@ async function loadAlarms($: EngineInterface, dir: string, now: number): Promise
       alarm = alarmOf(f.name, await $.fs.read(`${dir}/${f.name}`), now)
       alarmCache.set(f.name, alarm)
     } catch (err) {
-      alarm = err instanceof SyntaxError ? (alarmCache.get(f.name) ?? null) : null
+      alarm = err instanceof NotPipeline ? null : (alarmCache.get(f.name) ?? null)
     }
     if (alarm) out.push(alarm)
   }
@@ -202,7 +210,7 @@ async function loadFolders($: EngineInterface, home: string, folders: Folders, n
       return []
     }
   }
-  const schedules = await tryRead(folders.scheduleLogs, dir => loadSchedules($, dir, folders.scheduleEvery))
+  const schedules = await tryRead(folders.scheduleLogs, dir => loadSchedules($, dir, folders.scheduleEvery, errors))
   const alarms = await tryRead(folders.statusDir, dir => loadAlarms($, dir, now))
   return { schedules, alarms, folderErrors: errors }
 }
@@ -219,7 +227,6 @@ async function migrate($: EngineInterface): Promise<void> {
   return copying
 }
 async function copyOld($: EngineInterface): Promise<void> {
-  let failed = ''
   try {
     if ((await $.store.get(MIGRATED)) === true) return
     const home = await $.env.get('HOME')
@@ -228,7 +235,6 @@ async function copyOld($: EngineInterface): Promise<void> {
     const now = await $.clock.now()
     const have = new Set(await $.fs.list(to).then(l => l.map(f => f.name)).catch(() => [] as string[]))
     for (const dir of OLD_SESSIONS) {
-      failed = dir
       const from = `${home}/${dir}`
       let old: FsEntry[]
       try {
@@ -249,7 +255,7 @@ async function copyOld($: EngineInterface): Promise<void> {
     await $.store.set(MIGRATED, true)
     await update($, migrateError, () => null)
   } catch (err) {
-    await update($, migrateError, () => `搬不了 ~/${failed || OLD_SESSIONS[0]} 的舊檔：${errorText(err)}`).catch(() => {})
+    await update($, migrateError, () => `舊名的對話檔沒搬完，下次啟動再試：${errorText(err)}`).catch(() => {})
   }
 }
 
@@ -478,11 +484,12 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'my-status', description: '打開狀態：等你回話的對話、出問題的產線、每個對話、額度、排程、可以清的' })
     const started = await next(e)
-    if (isWriting) void migrate($)
-    // the files are read only on /my-status. a reload (or a new worker) with the pane still up reads again
+    const copied = isWriting ? migrate($) : Promise.resolve()
+    // the files are read only on /my-status. a reload (or a new worker) with the pane still up reads
+    // again, once the old names' files are copied
     if (await isPaneUp($)) {
       await loadFolds($)
-      void refresh($, false, isWriting, folders)
+      void copied.then(() => refresh($, false, isWriting, folders))
       startReading($, isNotifying, isWriting, folders)
     }
     return started
@@ -703,12 +710,12 @@ export const register: Register = (on, options) => {
       <Box key="card-alarms" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
         {header('產線', `${snap.alarms.length} 條要看`)}
         {limited('alarms', snap.alarms, a => {
-          const age = waited(now - a.updated)
-          const right = `${ALARM_WORD[a.kind]} · ${age}`
+          const age = a.updated == null ? '' : waited(now - a.updated)
+          const right = `${ALARM_WORD[a.kind]}${age ? ` · ${age}` : ''}`
           return row(
             `alarm-${a.file}`,
             <Text wrap="truncate-end">{a.title}<Text dimColor>{a.headline ? fit(` · ${a.headline}`, cardColumns - a.title.length * 2 - right.length * 2 - 1) : ''}</Text></Text>,
-            <Text><Text color="error">{ALARM_WORD[a.kind]}</Text><Text dimColor> · {age}</Text></Text>,
+            <Text><Text color="error">{ALARM_WORD[a.kind]}</Text><Text dimColor>{age ? ` · ${age}` : ''}</Text></Text>,
           )
         })}
       </Box>

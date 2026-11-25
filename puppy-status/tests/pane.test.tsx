@@ -54,6 +54,8 @@ function world(on: On) {
     // any other file, by its full path: the status folder, the schedule logs, the Codex lock
     other: {} as Record<string, string>,
     otherTimes: {} as Record<string, number>,
+    // paths whose read fails with a permission error
+    unreadable: new Set<string>(),
   }
   mock.env(on, { HOME: '/home/me' })
   const clock = mock.clock(on, { now: T })
@@ -86,6 +88,7 @@ function world(on: On) {
     return { deny: 'ENOENT: no such file or directory' }
   })
   on('fs.read', (_, e) => {
+    if (w.unreadable.has(e.path)) throw new Error('EACCES: permission denied')
     const text = e.path.startsWith(`${SESSIONS}/`) ? w.files[e.path.slice(SESSIONS.length + 1)]
       : e.path.startsWith(`${APP}/`) ? w.app[e.path.slice(APP.length + 1, -'.json'.length)]
       : w.codex[e.path] ?? w.other[e.path]
@@ -444,6 +447,25 @@ test('a status file caught halfway through a write keeps its last alarm', { opti
   await clock.advance(60_000)
   await clock.settle()
   expect(textOf(await ui.find({ key: 'card-alarms' }))).toContain('出錯')
+  // a file that turns into another format is passed over, not kept
+  w.other[`${STATUS}/c.json`] = '{"format": "something-else"}'
+  await clock.advance(60_000)
+  await clock.settle()
+  expect(await ui.find({ key: 'card-alarms' })).toBeFalsy()
+})
+
+test('one log that can\'t be read is named; the other jobs still show; an unreadable "every" is said', { options: { schedule_logs: '~/logs', schedule_every: 'daily 1d, watch 90min' } }, async ($, on) => {
+  const { w } = world(on)
+  w.other = {
+    [`${LOGS}/daily.log`]: `===== ${stamp(T - HOUR)} daily 開始\n===== ${stamp(T - HOUR + 1000)} daily 結束：成功\n`,
+    [`${LOGS}/locked.log`]: 'x',
+  }
+  w.unreadable.add(`${LOGS}/locked.log`)
+  const ui = await open($)
+  expect(textOf(await ui.find({ key: 'card-schedules' }))).toContain('daily')
+  const texts = await textsOf(ui)
+  expect(texts.some(t => t.startsWith('讀不到 locked.log：'))).toBe(true)
+  expect(texts.some(t => t.startsWith('schedule every 看不懂：watch 90min'))).toBe(true)
 })
 
 test('the Codex lock and limit show under the limits; a lock held over an hour may not have been let go', async ($, on) => {

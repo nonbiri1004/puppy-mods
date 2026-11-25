@@ -32,7 +32,7 @@ each conversation writes one small json file about itself, in `~/.claude/puppy-s
 - `appSession` names the desktop app's own record of the conversation, under `~/Library/Application Support/Claude/claude-code-sessions/` (from the environment the app starts claude code with; none in the terminal). the pane reads only `isArchived` there, for the `可以清` card. that file is the app's and not documented: missing, or without `isArchived` as true or false, counts as unknown, and the pane says so instead of guessing.
 - `host` is optional.
 - the pane lists a conversation for three days after its last turn, a `waiting` one for two weeks. files older than two weeks are not read; they stay in the folder.
-- puppy-sessions (0.13) wrote the same files into `~/.claude/puppy-sessions/`, and puppy-console (up to 0.12) into `~/.claude/console/sessions/`; the first start copies them over once (README, "coming from puppy-sessions").
+- the mod's older names wrote the same files into their own folders; the first start copies them over once ([README, coming from puppy-sessions](README.md#coming-from-puppy-sessions)).
 
 ## schedule logs
 
@@ -46,8 +46,9 @@ set **schedule logs** to a folder of logs that scheduled jobs (launchd, cron) ap
 
 - `=====`, the time (`YYYY-MM-DD HH:MM:SS`, the computer's own time, no offset), the job's name (no spaces), then `開始` (anything after it, like the folder it ran in, is passed over) or `結束：` and the result. only `成功` counts as worked; any other result counts as failed.
 - one log may hold several jobs, and one job may write to two logs: the newest start counts. an empty log names no job.
-- a job whose last start has no end after it is `跑中` for six hours, then counts as failed (it stopped without saying so).
-- **schedule every** says how often a job should start, `daily 1d, weekly 7d` (`m`, `h`, `d`). a job that has not started for that long plus two hours is `該跑沒跑`. a job not named there is never late. a job that runs when something changes (not on a clock) is best left out of it.
+- only the last 32 kb of a log is read: a run that prints more than that after its start line drops out of the card until its end line. keep long output in another file.
+- a job whose last start has no end after it (an end in the same second before it belongs to the run before) is `跑中` for six hours, then counts as failed (it stopped without saying so).
+- **schedule every** says how often a job should start, `daily 1d, weekly 7d` (`m`, `h`, `d`, `w`; pieces split by commas). a job that has not started for that long plus two hours is `該跑沒跑`, unless a run is still going. a job not named there is never late; a piece it can't read is said in the pane. a job that runs when something changes (not on a clock) is best left out of it.
 
 ## the codex lock
 

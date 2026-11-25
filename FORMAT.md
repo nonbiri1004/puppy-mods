@@ -11,7 +11,7 @@ a writer (a pipeline, a board, a script) writes one small json file into a share
 ## who reads what
 
 - **[puppy-status](puppy-status)** (setting `status_dir`, empty by default): only the pipelines that need a look, on its `產線` card: `state` `error`, a file older than its `stale_after_sec`, and the `live` pipeline's `detail.restarts_24h` over 1 (below, "known details"). it reads `pipeline`, `title`, `updated`, `stale_after_sec`, `state`, `headline` and those two `detail` fields; nothing else. it reads every `*.json` in the folder itself (not its subfolders) while its pane is open (once on `/my-status`, then every minute). its own conversation files are a different format, in [its FORMAT.md](puppy-status/FORMAT.md).
-- no mod reads `waiting`, `waiting_groups`, `sections`, `progress`, `last_output`, `next` or the rest of `detail` now. puppy-todo (up to 1.2.0, now gone) read `waiting` and `waiting_groups` as a read-only card; puppy-console (up to 0.12) read every field, a card per pipeline. the fields stay here so the writers keep one agreement, and a board (such as projects-map's) can still read them.
+- no mod reads `waiting`, `waiting_groups`, `sections`, `progress`, `last_output`, `next` or the rest of `detail` now. puppy-todo (up to 1.2.0, now gone) read `waiting` and `waiting_groups` as a read-only card; puppy-console (up to 0.12) read every field, a card per pipeline. the fields stay here so the writers keep one agreement, and any other reader (a board page, a script) can still use them. the sections below say how a reader should show them.
 
 a mod never runs a writer and never writes into the folder. an item leaves a card only when its writer stops listing it. the most a button does is open a link or a file to look at, or put words in the prompt box (see `url` and `actions`, below).
 
@@ -74,7 +74,7 @@ new in version 1: `url` and `due`. older files and older mods simply leave them 
 
 ## actions
 
-an item in `waiting` can carry up to three buttons, `actions: [{ label, open | fill }]`, drawn on its row in the pane's list. `label` is the button's word, at most 24 characters. each action has exactly one of:
+(no puppy mod draws these now; this is how a reader should.) an item in `waiting` can carry up to three buttons, `actions: [{ label, open | fill }]`, drawn on its row in the pane's list. `label` is the button's word, at most 24 characters. each action has exactly one of:
 
 - `open`: a full path (or `~/…`) the pane opens with the computer's own app (macOS `open`) when you press it. it has to be a picture, a video, a sound or a pdf (`.mp4 .mov .m4v .webm .mkv .mp3 .wav .m4a .aac .flac .ogg .png .jpg .jpeg .gif .webp .pdf`), or a folder written with a `/` at the end. the folder can be synced, so the pane never opens anything that runs: no app or other bundle anywhere in the path, no `..`, and the same check again on where the path really leads (links resolved) when you press. a path that is not on this computer says so in the pane.
 - `fill`: at most 500 characters the pane puts in the prompt box of the conversation the pane is in, after anything already typed there. it sends nothing: you finish the words and press enter. write it so claude knows what to do without the card, for example `"in ai-video-pipeline, send baibai/ep04 back to compose because: "`.
@@ -83,7 +83,7 @@ an action that breaks a rule is left out, like any field of the wrong type; the 
 
 ## waiting groups
 
-when a pipeline has several items of one kind (three finals to review), it can name the kind once and point its items at it, so the list shows them as one row, `▸ review finals ×3 · 24h` (the oldest one's wait), that opens in place to each item and its buttons:
+(no puppy mod draws these now; this is how a reader should.) when a pipeline has several items of one kind (three finals to review), it can name the kind once and point its items at it, so the list shows them as one row, `▸ review finals ×3 · 24h` (the oldest one's wait), that opens in place to each item and its buttons:
 
 ```json
 "waiting_groups": [{ "id": "final-review", "label": "成片待審" }],
