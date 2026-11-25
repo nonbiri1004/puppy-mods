@@ -1,31 +1,34 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, FsEntry, Register, RenderChildren, Timer } from 'claude-code'
 
-import type { Conversation, Problem, Snapshot, Usage } from '../types'
+import type { Conversation, PipelineAlarm, Problem, Schedule, Snapshot, Usage } from '../types'
 import { cut, MASCOT_SCALE, mascot, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks } from './draw'
 import type { Mood } from './draw'
 import {
   ago, APP_SESSIONS, cleanPrompt, firstSentence, folderName, groupKeys, idle, isBrief, isSideChatTitle, isWrapUp, KEEP_WAITING_MS, nameOf, OLD_SESSIONS, oneLine,
   parseConversation, plain, plainLine, promptName, questionOf, recent, rowName, SESSIONS, shownState, sourceOf, stateWord, taskOf, waited, wrapOf,
 } from './sessions'
-import { claudeLimits, CODEX_SESSIONS, CODEX_TAIL_BYTES, codexLimits, limitText, readText } from './usage'
+import { ALARM_WORD, alarmOf, expandHome, NotPipeline } from './pipelines'
+import { everyOf, LOG_TAIL_BYTES, pausedOf, runsOf, SCHEDULE_WORD, scheduleState, schedulesOf } from './schedules'
+import { claudeLimits, CODEX_LIMIT, CODEX_LOCK, CODEX_SESSIONS, CODEX_TAIL_BYTES, codexLimits, limitText, LOCK_OLD_MS, lockOf, readText } from './usage'
 
-const PANE = 'puppy-sessions'
+const PANE = 'puppy-status'
 const REFRESH_MS = 60_000
 // a card's rows before "▸ 還有 N 個"
 const MAX_ROWS = 5
 // The terminal pane asks for this many rows: the 13-row puppy and the list fit.
 const PANE_ROWS = 40
-// $.store key: the old folder's files were copied over (migrate)
-const MIGRATED = 'migrated:console'
+// $.store key: the old folders' files were copied over (migrate). puppy-sessions kept its own
+// "migrated:console" in its own store; this is a new mod's store, so a new key.
+const MIGRATED = 'migrated:puppy-sessions'
 
-const snapshot = atom({ plugin: 'puppy-sessions', key: 'snapshot' } as const, null)
+const snapshot = atom({ plugin: 'puppy-status', key: 'snapshot' } as const, null)
 // A card's rest opened by its name, closed by default, kept in $.store under "more:<name>", so the
 // minute's read and a restart keep it open.
-const openMore = atom({ plugin: 'puppy-sessions', key: 'openMore' } as const, {} as Record<string, boolean>)
-const writeError = atom({ plugin: 'puppy-sessions', key: 'writeError' } as const, null as string | null)
-const migrateError = atom({ plugin: 'puppy-sessions', key: 'migrateError' } as const, null as string | null)
-const actionNote = atom({ plugin: 'puppy-sessions', key: 'actionNote' } as const, null as { text: string; isError: boolean } | null)
+const openMore = atom({ plugin: 'puppy-status', key: 'openMore' } as const, {} as Record<string, boolean>)
+const writeError = atom({ plugin: 'puppy-status', key: 'writeError' } as const, null as string | null)
+const migrateError = atom({ plugin: 'puppy-status', key: 'migrateError' } as const, null as string | null)
+const actionNote = atom({ plugin: 'puppy-status', key: 'actionNote' } as const, null as { text: string; isError: boolean } | null)
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 const isMissing = (why: string) => /ENOENT|no such|not found|missing/i.test(why)
@@ -136,15 +139,113 @@ async function loadCodex($: EngineInterface, home: string): Promise<Usage['codex
   }
 }
 
-async function loadUsage($: EngineInterface, home: string): Promise<Usage> {
-  const claude = await $.session.usage().then(u => claudeLimits(u.rateLimits)).catch(() => [])
-  return { claude, codex: await loadCodex($, home) }
+// The Codex lock and limit files (FORMAT.md, "codex lock"). Neither there is the usual case: null.
+// One that is there but can't be read is named in `errors`, not taken for "no lock".
+async function loadHold($: EngineInterface, home: string, errors: string[]): Promise<Usage['hold']> {
+  const missing = (name: string) => (err: unknown) => {
+    const why = errorText(err)
+    if (!isMissing(why)) errors.push(`讀不到 ~/${name}：${why}`)
+    return null
+  }
+  const lockDir = `${home}/${CODEX_LOCK}`
+  const lock = await $.fs.stat(lockDir)
+    .then(async st => lockOf(await $.fs.read(`${lockDir}/owner`).catch(() => ''), st.mtimeMs ?? null))
+    .catch(missing(CODEX_LOCK))
+  const limit = await $.fs.stat(`${home}/${CODEX_LIMIT}`)
+    .then(async st => ({ text: oneLine(await $.fs.read(`${home}/${CODEX_LIMIT}`), 120), since: st.mtimeMs ?? null }))
+    .catch(missing(CODEX_LIMIT))
+  return lock || limit ? { lock, limit } : null
 }
 
-// puppy-console kept the conversations' files in ~/.claude/console/sessions/. They are copied
-// here once, each one of the last two weeks (older ones are never shown) this folder does not have
-// yet (a conversation may already have written its own), and left where they were: the old folder
-// can go by hand. A failure is said in the pane and tried again at the next start.
+async function loadUsage($: EngineInterface, home: string, errors: string[]): Promise<Usage> {
+  const claude = await $.session.usage().then(u => claudeLimits(u.rateLimits)).catch(() => [])
+  return { claude, codex: await loadCodex($, home), hold: await loadHold($, home, errors) }
+}
+
+// The folders typed in the settings. Empty: that card is off.
+type Folders = { statusDir: string; scheduleLogs: string; scheduleEvery: string; paused: string }
+
+// Each job's last run, from the end of every *.log in the schedule logs folder. A log that can't
+// be read is named in `errors` and the other jobs still show; so are pieces of "schedule every"
+// it can't read.
+async function loadSchedules($: EngineInterface, dir: string, setting: string, paused: Set<string>, now: number, errors: string[]): Promise<Schedule[]> {
+  const runs = []
+  for (const f of await $.fs.list(dir)) {
+    if (f.kind !== 'file' || !f.name.endsWith('.log') || f.name.startsWith('.') || !f.size) continue
+    const offset = Math.max(0, f.size - LOG_TAIL_BYTES)
+    try {
+      runs.push(...runsOf(await $.fs.read(`${dir}/${f.name}`, { offset, length: f.size - offset })))
+    } catch (err) {
+      errors.push(`讀不到 ${f.name}：${errorText(err)}`)
+    }
+  }
+  const { every, unread } = everyOf(setting)
+  if (unread.length) errors.push(`schedule every 看不懂：${unread.join('、')}（寫成 daily 1d，單位 m h d w）`)
+  const out: Schedule[] = []
+  for (const s of schedulesOf(runs, every)) out.push({ ...s, isPaused: paused.has(s.job), seenAt: await seenAt($, s.job, now) })
+  return out
+}
+
+// When this pane first saw a job, kept in $.store under "seen:<job>" (this computer, every
+// conversation): a job is not called late before the pane has watched one whole interval of it.
+// A store that can't be read or written: not known, and late counts from the last start alone.
+async function seenAt($: EngineInterface, job: string, now: number): Promise<number | null> {
+  try {
+    const was = await $.store.get(`seen:${job}`)
+    if (typeof was === 'number') return was
+    await $.store.set(`seen:${job}`, now)
+    return now
+  } catch {
+    return null
+  }
+}
+
+// The pipelines that need a look, from every *.json in the status folder. A file caught halfway
+// through a write, a sync's half copy or a file that can't be read this minute is judged again
+// from its last good text, so one that stays broken still goes quiet once past stale_after_sec; a
+// file of another format is not a pipeline's and is passed over.
+const statusCache = new Map<string, string>()
+async function loadAlarms($: EngineInterface, dir: string, now: number, paused: Set<string>): Promise<PipelineAlarm[]> {
+  const out: PipelineAlarm[] = []
+  for (const f of await $.fs.list(dir)) {
+    if (f.kind !== 'file' || !f.name.endsWith('.json') || f.name.startsWith('.')) continue
+    let alarm: PipelineAlarm | null
+    try {
+      const text = await $.fs.read(`${dir}/${f.name}`)
+      alarm = alarmOf(f.name, text, now)
+      statusCache.set(f.name, text)
+    } catch (err) {
+      const was = err instanceof NotPipeline ? undefined : statusCache.get(f.name)
+      alarm = was == null ? null : alarmOf(f.name, was, now)
+    }
+    if (alarm && !paused.has(alarm.pipeline)) out.push(alarm)
+  }
+  return out.sort((a, b) => a.title.localeCompare(b.title))
+}
+
+// A folder the settings ask for and the pane can't read is said in the pane, missing or not.
+async function loadFolders($: EngineInterface, home: string, folders: Folders, now: number) {
+  const errors: string[] = []
+  const tryRead = async <T,>(setting: string, read: (dir: string) => Promise<T[]>): Promise<T[]> => {
+    if (!setting.trim()) return []
+    try {
+      return await read(expandHome(setting.trim(), home))
+    } catch (err) {
+      errors.push(`讀不到 ${setting.trim()}：${errorText(err)}`)
+      return []
+    }
+  }
+  const paused = pausedOf(folders.paused)
+  const schedules = await tryRead(folders.scheduleLogs, dir => loadSchedules($, dir, folders.scheduleEvery, paused, now, errors))
+  const alarms = await tryRead(folders.statusDir, dir => loadAlarms($, dir, now, paused))
+  return { schedules, alarms, folderErrors: errors }
+}
+
+// puppy-sessions (0.13) kept the conversations' files in ~/.claude/puppy-sessions/, and
+// puppy-console (up to 0.12) in ~/.claude/console/sessions/. They are copied here once, newest
+// folder first, each one of the last two weeks (older ones are never shown) this folder does not
+// have yet (a conversation may already have written its own), and left where they were: the old
+// folders can go by hand. A failure is said in the pane and tried again at the next start.
 async function migrate($: EngineInterface): Promise<void> {
   // in the write queue, so this conversation's own first write never runs while files are copied
   const copying = writing.then(() => copyOld($))
@@ -156,33 +257,35 @@ async function copyOld($: EngineInterface): Promise<void> {
     if ((await $.store.get(MIGRATED)) === true) return
     const home = await $.env.get('HOME')
     if (!home) return
-    const from = `${home}/${OLD_SESSIONS}`
     const to = `${home}/${SESSIONS}`
-    let old: FsEntry[]
-    try {
-      old = await $.fs.list(from)
-    } catch (err) {
-      if (!isMissing(errorText(err))) throw err
-      old = []
-    }
     const now = await $.clock.now()
     const have = new Set(await $.fs.list(to).then(l => l.map(f => f.name)).catch(() => [] as string[]))
-    for (const f of old) {
-      if (f.kind !== 'file' || !f.name.endsWith('.json') || f.name.startsWith('.') || have.has(f.name)) continue
-      if (f.mtimeMs && now - f.mtimeMs > KEEP_WAITING_MS) continue
-      const text = await $.fs.read(`${from}/${f.name}`)
-      // another conversation may have written its own file meanwhile: that one is newer
-      if (await $.fs.exists(`${to}/${f.name}`)) continue
-      await $.fs.write(`${to}/${f.name}`, text)
+    for (const dir of OLD_SESSIONS) {
+      const from = `${home}/${dir}`
+      let old: FsEntry[]
+      try {
+        old = await $.fs.list(from)
+      } catch (err) {
+        if (!isMissing(errorText(err))) throw err
+        old = []
+      }
+      for (const f of old) {
+        if (f.kind !== 'file' || !f.name.endsWith('.json') || f.name.startsWith('.') || have.has(f.name)) continue
+        if (f.mtimeMs && now - f.mtimeMs > KEEP_WAITING_MS) continue
+        const text = await $.fs.read(`${from}/${f.name}`)
+        // another conversation may have written its own file meanwhile: that one is newer
+        if (!(await $.fs.exists(`${to}/${f.name}`))) await $.fs.write(`${to}/${f.name}`, text)
+        have.add(f.name)
+      }
     }
     await $.store.set(MIGRATED, true)
     await update($, migrateError, () => null)
   } catch (err) {
-    await update($, migrateError, () => `搬不了 ~/${OLD_SESSIONS} 的舊檔：${errorText(err)}`).catch(() => {})
+    await update($, migrateError, () => `舊名的對話檔沒搬完，下次啟動再試：${errorText(err)}`).catch(() => {})
   }
 }
 
-// This conversation's own file, `~/.claude/puppy-sessions/<session id>.json`; only this
+// This conversation's own file, `~/.claude/puppy-status/<session id>.json`; only this
 // conversation writes it. `own` is what the file last said, kept by session id: /clear gives a
 // new id without a new session.start, and a reload starts the module over and reads it back.
 // Writes go one after another and never hold up the turn: a turn's hooks queue them and go on.
@@ -289,7 +392,7 @@ const live = (s: Snapshot) => s.conversations.filter(c => !(c.appSession && s.ar
 // One refresh at a time: the timer and the button share the running one,
 // so an older read can never finish last and overwrite a newer one.
 let running: Promise<void> | null = null
-function refresh($: EngineInterface, isNotifying: boolean, isReading: boolean): Promise<void> {
+function refresh($: EngineInterface, isNotifying: boolean, isReading: boolean, folders: Folders): Promise<void> {
   running ??= (async () => {
     const [home, now] = await Promise.all([$.env.get('HOME'), $.clock.now()])
     const prev = await read($, snapshot)
@@ -297,11 +400,16 @@ function refresh($: EngineInterface, isNotifying: boolean, isReading: boolean): 
       ? await loadConversations($, `${home}/${SESSIONS}`, now)
       : { conversations: [], error: null, problems: [] }
     const archived = home ? await loadArchived($, home, loaded.conversations) : {}
+    const holdErrors: string[] = []
+    const usage = home ? await loadUsage($, home, holdErrors) : { claude: [], codex: null, hold: null }
+    const fromFolders = home ? await loadFolders($, home, folders, now) : { schedules: [], alarms: [], folderErrors: [] }
     const next: Snapshot = {
       conversations: loaded.conversations,
       conversationsError: loaded.error,
       archived,
-      usage: home ? await loadUsage($, home) : { claude: [], codex: null },
+      usage,
+      ...fromFolders,
+      folderErrors: [...fromFolders.folderErrors, ...holdErrors],
       problems: loaded.problems,
       loadedAt: now,
     }
@@ -380,15 +488,15 @@ function stopReading() {
 }
 
 // Like setInterval in a component's mount, cleared on unmount: each tick first asks whether the
-// pane is still up, and stops when it is not. Started over on every /sessions, so a second
-// /sessions never leaves two timers. Only the ticks tell news with a toast: the read on opening
+// pane is still up, and stops when it is not. Started over on every /my-status, so a second
+// /my-status never leaves two timers. Only the ticks tell news with a toast: the read on opening
 // is shown by the pane itself, and would compare against a read that may be hours old.
-function startReading($: EngineInterface, isNotifying: boolean, isReading: boolean) {
+function startReading($: EngineInterface, isNotifying: boolean, isReading: boolean, folders: Folders) {
   stopReading()
   reading = $.clock.every(REFRESH_MS, () => {
     void (async () => {
       if (!(await isPaneUp($))) return stopReading()
-      await refresh($, isNotifying, isReading)
+      await refresh($, isNotifying, isReading, folders)
     })().catch(() => {})
   })
 }
@@ -397,16 +505,23 @@ export const register: Register = (on, options) => {
   const isNotifying = options.notify !== 'off'
   const isWriting = options.conversations !== 'off'
   const isPushing = isWriting && options.push !== 'off'
+  const folders: Folders = {
+    statusDir: String(options.status_dir ?? ''),
+    scheduleLogs: String(options.schedule_logs ?? ''),
+    scheduleEvery: String(options.schedule_every ?? ''),
+    paused: String(options.paused ?? ''),
+  }
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'sessions', description: '打開對話總覽：等你回話的、每個對話、額度、可以清的' })
+    await $.command.register({ name: 'my-status', description: '打開狀態：等你回話的對話、出問題的產線、每個對話、額度、排程、可以清的' })
     const started = await next(e)
-    if (isWriting) void migrate($)
-    // the files are read only on /sessions. a reload (or a new worker) with the pane still up reads again
+    const copied = isWriting ? migrate($) : Promise.resolve()
+    // the files are read only on /my-status. a reload (or a new worker) with the pane still up reads
+    // again, once the old names' files are copied
     if (await isPaneUp($)) {
       await loadFolds($)
-      void refresh($, false, isWriting)
-      startReading($, isNotifying, isWriting)
+      void copied.then(() => refresh($, false, isWriting, folders))
+      startReading($, isNotifying, isWriting, folders)
     }
     return started
   })
@@ -499,17 +614,18 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: 'sessions' }, async $ => {
+  on('command.run', { command: 'my-status' }, async $ => {
     await loadFolds($)
     // read before opening, so the first draw has the cards
-    await refresh($, false, isWriting)
-    await $.ui.open({ id: PANE, title: 'sessions', rows: PANE_ROWS })
-    startReading($, isNotifying, isWriting)
-    return { text: '對話總覽已打開。' }
+    await refresh($, false, isWriting, folders)
+    await $.ui.open({ id: PANE, title: 'status', rows: PANE_ROWS })
+    startReading($, isNotifying, isWriting, folders)
+    return { text: '狀態已打開。' }
   })
 
-  // The pane is the conversations and nothing else: the ones that wait for you to answer, at the
-  // top; one row for each of the others; the rate limits; the finished ones you may archive.
+  // The pane: the conversations that wait for you to answer, at the top; the pipelines that need a
+  // look (only when one does); one row for each of the other conversations; the rate limits and
+  // who holds Codex; the scheduled jobs; the finished conversations you may archive.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
@@ -592,7 +708,7 @@ export const register: Register = (on, options) => {
     )
 
     // 額度: each window on one line; Codex says how old its reading is (it writes one only while it runs).
-    const { claude, codex } = snap.usage
+    const { claude, codex, hold } = snap.usage
     const usageCard = (
       <Box key="card-usage" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
         {header('額度', '')}
@@ -604,6 +720,57 @@ export const register: Register = (on, options) => {
           <Text wrap="truncate-end">{fit(codex.limits.map(l => limitText(l, now)).join('　'), cardColumns - 18)}</Text>,
           <Text dimColor>Codex{codex.readAt != null ? ` · ${readText(codex.readAt, now)}` : ''}</Text>,
         )}
+        {hold?.limit && row(
+          'codex-limit',
+          <Text wrap="truncate-end"><Text color="error">Codex 撞額度</Text><Text dimColor>{fit(hold.limit.text ? ` · ${hold.limit.text}` : '', cardColumns - 22)}</Text></Text>,
+          <Text dimColor>{hold.limit.since != null ? ago(now - hold.limit.since) : ''}</Text>,
+        )}
+        {hold?.lock && row(
+          'codex-lock',
+          <Text wrap="truncate-end">Codex 使用中<Text dimColor>{fit(hold.lock.owner ? ` · ${hold.lock.owner}` : '', cardColumns - 24)}</Text></Text>,
+          hold.lock.since != null && now - hold.lock.since > LOCK_OLD_MS
+            ? <Text><Text color="error">可能沒放</Text><Text dimColor> · {waited(now - hold.lock.since)}</Text></Text>
+            : <Text dimColor>{hold.lock.since != null ? waited(now - hold.lock.since) : ''}</Text>,
+        )}
+      </Box>
+    )
+
+    // 產線: only the pipelines that need a look (an error, gone quiet, restarting), each with its
+    // headline and how long since its file was written. Shown only when there is one.
+    const alarmsCard = snap.alarms.length > 0 && (
+      <Box key="card-alarms" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
+        {header('產線', `${snap.alarms.length} 條要看`)}
+        {limited('alarms', snap.alarms, a => {
+          const age = a.updated == null ? '' : waited(now - a.updated)
+          const right = `${ALARM_WORD[a.kind]}${age ? ` · ${age}` : ''}`
+          return row(
+            `alarm-${a.file}`,
+            <Text wrap="truncate-end">{a.title}<Text dimColor>{a.headline ? fit(` · ${a.headline}`, cardColumns - a.title.length * 2 - right.length * 2 - 1) : ''}</Text></Text>,
+            <Text><Text color="error">{ALARM_WORD[a.kind]}</Text><Text dimColor>{age ? ` · ${age}` : ''}</Text></Text>,
+          )
+        })}
+      </Box>
+    )
+
+    // 排程: one row per job, its last run's word and how long ago it started. Only a late or broken
+    // job gets a color.
+    const schedulesCard = snap.schedules.length > 0 && (
+      <Box key="card-schedules" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
+        {header('排程', '')}
+        {snap.schedules.map(sc => {
+          const state = scheduleState(sc, now)
+          const last = sc.startedAt ?? sc.endedAt
+          const age = last == null ? '' : state === 'running' ? waited(now - last) : ago(now - last)
+          const isBad = state === 'late' || state === 'failed'
+          // a paused job is said in grey, its name too: nothing to do about it
+          const isQuiet = state === 'paused'
+          const isBefore = state === 'late' || state === 'pending' || state === 'paused'
+          return row(
+            `schedule-${sc.job}`,
+            <Text wrap="truncate-end" dimColor={isQuiet}>{sc.job}</Text>,
+            <Text><Text color={isBad ? 'error' : state === 'running' ? 'success' : undefined} dimColor={!isBad && state !== 'running'}>{SCHEDULE_WORD[state]}</Text><Text dimColor>{age ? ` · ${isBefore ? '上次 ' : ''}${age}` : ''}</Text></Text>,
+          )
+        })}
       </Box>
     )
 
@@ -645,7 +812,7 @@ export const register: Register = (on, options) => {
           <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
             {waiting.length > 0 && <Text dimColor>{ago(now - snap.loadedAt)}</Text>}
             {/* no toast: what it finds shows right here */}
-            <Button key="refresh" label="重新整理" hotkey="r" onPress={() => refresh($, false, isWriting)} />
+            <Button key="refresh" label="重新整理" hotkey="r" onPress={() => refresh($, false, isWriting, folders)} />
           </Box>
         </Box>
         {waitingCard || (
@@ -654,15 +821,18 @@ export const register: Register = (on, options) => {
             <Text>沒有對話在等你</Text>
           </Box>
         )}
+        {alarmsCard}
         {conversationsCard}
         {usageCard}
+        {schedulesCard}
         {cleanCard}
         {unknown > 0 && <Text dimColor>{unknown} 個做完的對話讀不到桌面 app 的封存狀態，沒列進可以清</Text>}
         {note && (note.isError ? <Text color="error">{note.text}</Text> : <Text dimColor>{note.text}</Text>)}
-        {!isWriting && <Text dimColor>conversations 關著：對話不寫檔，這裡不列（/config → puppy-sessions）</Text>}
+        {!isWriting && <Text dimColor>conversations 關著：對話不寫檔，這裡不列（/config → puppy-status）</Text>}
         {isWriting && snap.conversationsError && <Text color="error">讀不到對話資料夾：{snap.conversationsError}</Text>}
         {isWriting && ownWriteError && <Text dimColor>這個對話寫不進自己的檔：{ownWriteError}</Text>}
         {migrated && <Text dimColor>{migrated}</Text>}
+        {snap.folderErrors.map(why => <Text key={`folder:${why}`} color="error">{why}</Text>)}
         {snap.problems.map(p => (
           <Text key={`p:${p.file}`} dimColor>略過 {p.file}：{p.reason}</Text>
         ))}

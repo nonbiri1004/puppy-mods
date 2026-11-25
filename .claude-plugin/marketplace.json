@@ -9,14 +9,9 @@
   },
   "plugins": [
     {
-      "name": "puppy-todo",
-      "source": "./puppy-todo",
-      "description": "your own to-do list in a quiet pane: add, tick, delete. nothing else writes to it"
-    },
-    {
-      "name": "puppy-sessions",
-      "source": "./puppy-sessions",
-      "description": "your claude conversations in a pane: the ones that wait for you to answer, one row for each of the others, your rate limits, and the finished ones you may archive"
+      "name": "puppy-status",
+      "source": "./puppy-status",
+      "description": "what needs you now, in a pane: the conversations that wait for you, the pipelines that need a look, one row for each other conversation, your rate limits and who holds codex, your scheduled jobs, and the finished conversations you may archive"
     },
     {
       "name": "puppy-skills",

@@ -5,9 +5,11 @@ import type { Conversation, ConversationState, Source } from '../types'
 
 // Under the home folder, on this computer only: what you typed and the recaps never leave it.
 // Not ~/.claude/sessions/, which is Claude Code's own.
-export const SESSIONS = '.claude/puppy-sessions'
-// Where puppy-console (this mod's old name) kept them; copied over once (migrate in register.tsx).
-export const OLD_SESSIONS = '.claude/console/sessions'
+export const SESSIONS = '.claude/puppy-status'
+// Where this mod kept them under its old names, newest name first: puppy-sessions (0.13) and
+// puppy-console (up to 0.12). Copied over once (migrate in register.tsx); a file already copied
+// from a newer folder is not taken again from an older one.
+export const OLD_SESSIONS = ['.claude/puppy-sessions', '.claude/console/sessions'] as const
 // The desktop app's own record of each of its conversations, under the home folder (macOS). Not
 // documented: read for isArchived alone, and a file that does not say it counts as unknown.
 export const APP_SESSIONS = 'Library/Application Support/Claude/claude-code-sessions'

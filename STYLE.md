@@ -1,6 +1,6 @@
 # puppy mods style
 
-How every puppy mod looks, so they feel like one family. `puppy-sessions` is the reference: when this file and that mod disagree, fix one of them.
+How every puppy mod looks, so they feel like one family. `puppy-status` is the reference: when this file and that mod disagree, fix one of them.
 
 ## Panes are cards
 
