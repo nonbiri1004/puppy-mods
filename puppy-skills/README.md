@@ -50,3 +50,13 @@ a skill gets `⏰` when a scheduled task's prompt (`~/.claude/scheduled-tasks/<t
 the time comes from the desktop app's own `scheduled-tasks.json` files under `~/Library/Application Support/Claude/claude-code-sessions/` (macOS). a task the app turned off is left out. without those files the clock shows with no time.
 
 it reads again when you open it and when you press refresh.
+
+## how it works
+
+- **starts from**: `/my-kit` or `/my-skills` (both registered at `session.start`). it opens the pane and reads; there is no timer, so it reads again only on refresh.
+- **reads**: in parallel, `~/.claude/skills`, every `<repo>/.claude/skills` under `~/dev`, each plugin's `skills/` from `installed_plugins.json`, the scheduled tasks' prompts (and the app's `scheduled-tasks.json` for their times), and the app's command list (`$.command.list()`). each `SKILL.md` gives its `name` and `description` from the frontmatter; one with no `name` is left out.
+- **sorts**: a skill found twice shows once. cards are yours, then one per repo, then one per plugin, names a→z; `synced` ones fold under `from claude.ai`. a skill gets `⏰` when a task's prompt names it. mods are the commands from a plugin with a bare name that is not one of the skills found, minus `/my-skills`.
+- **draws**: one pane (`ui.render`, id `puppy-skills`): a card per group, then the mods, then the folded `from claude.ai`. which rows are open is kept in the pane's own state.
+- **writes**: nothing. it never runs a skill or a command.
+- **when it fails**: each source is tried alone. one that can't be read adds `could not read …` in red at the bottom, and the others still show. a read that finishes after a newer one is dropped.
+- **where**: [register.tsx](hooks/register.tsx) (finding files, the pane), [skills.ts](hooks/skills.ts) (parsing, cards, `⏰` matching), [draw.ts](hooks/draw.ts) (the puppy).

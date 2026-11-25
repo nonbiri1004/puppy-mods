@@ -95,3 +95,14 @@ every set also has a quiet background (a hum, a fan, rain); the speaker's own me
 ## the sounds are numbers
 
 there are no sound files. each sound is a few numbers (notes, a wave, how fast it fades), and the app makes the sound from them on your computer.
+
+## how it works
+
+- **starts from**: `session.start`, not a command. it reads your picks, puts the look on, and registers `/look`, which only opens the pane.
+- **reads**: your picks, one entry (`prefs`) in the mod's own store, read field by field: a missing or out-of-range field falls back to its default. the local hour decides the sky (dawn, day, dusk, night).
+- **makes**: the colors come from the brand's two palettes (`brand-colors.ts`; eye care is worked out from them in `palette.ts`) through `make-colors.js`, then the git status colors and the message colors are added. the sky is an svg named by palette, time of day and weather (rain when the rain sounds are picked). the message style and the seven sounds are plain data; only the cues you kept are sent.
+- **draws**: it hands the whole look to `$.theme.set(…)`, and the app paints it. the sky is drawn by a `Backdrop` render that answers only on the desktop and mobile surfaces; the `/look` pane is its own `ui.render`.
+- **writes back**: a pick in the pane reads the store again, changes that one thing, writes it back (fields a newer version added are kept) and wears the result at once. turning the look off calls `$.theme.clear()`, and only on your own off, never on a session start or reload.
+- **keeps up**: every five seconds a watch reads the store again. it wears the look again when another session changed a pick, or when the hour crossed into another part of the day.
+- **when it fails**: if style or sound is refused, the colors still go on and one line says so. a look that fails to go on is tried again by the watch. "not drawn" (the window has not attached yet) goes to the debug log only. if the colors would not paint (a contrast problem), a note shows once per palette.
+- **where**: [register.tsx](hooks/register.tsx) (events, watch, the pane, backdrop), [look.ts](hooks/look.ts) (putting colors, sky, style and sound together), [prefs.ts](hooks/prefs.ts) (reading and keeping picks), [palette.ts](hooks/palette.ts) and [brand-colors.ts](hooks/brand-colors.ts) (colors), [scene.ts](hooks/scene.ts) (the sky), [style.ts](hooks/style.ts), [sound.ts](hooks/sound.ts). `make-colors.js` is generated: don't edit it.

@@ -82,6 +82,16 @@ one small json file per item in `~/.claude/todo/items/`. the file name is the id
 - items an older version left for GitHub to tick when a PR merged (`source`, or `completion.mode: "source"`) aren't shown: their file says open even after the merge, and this list doesn't ask GitHub. the files stay.
 - the list lives on this computer; a second computer has its own `~/.claude/todo/`.
 
+## how it works
+
+- **starts from**: `/todo` (registered at `session.start`). it opens the pane and, with text, adds an item. the pane does not open by itself; if it is already up when a session starts or reloads, it reads again.
+- **reads**: every `*.json` in `~/.claude/todo/items/` (a file that is not json, or has no `id` or text, is left out), and, only if `status_dir` is set, every `*.json` in that folder ([format](../FORMAT.md)). it reads on `/todo`, on refresh, after each turn (`turn.complete`) and every minute, and only while the pane is up: each tick asks whether the pane is still open and stops the timer when it is not.
+- **sorts**: open items oldest id first; done items newest first, for three days; deleted items and items an older version left for GitHub are dropped. a status file becomes a card if it has waiting items (cards sorted by title); items of one `waiting_groups` group, two or more, fold into one row.
+- **draws**: one pane (`ui.render`, id `puppy-todo`): your list card, `▸ done`, then one card per status file.
+- **writes**: only your own item files, one json each: add, tick, untick, delete. a press reads the file again first, so a change from another window is not undone. nothing is ever written into the status folder, and the mod gives Claude no tools.
+- **when it fails**: a list that can't be read keeps the last one and says so in red at the bottom. a status file caught halfway through a write keeps its last good card; an unreadable status folder keeps the cards and says `could not read …`. each read is numbered, so a slow old read can't overwrite a newer one.
+- **where**: [register.tsx](hooks/register.tsx) (events, reading, the pane), [todo.ts](hooks/todo.ts) (items, ticking, sorting), [board.ts](hooks/board.ts) (status files, cards), [draw.ts](hooks/draw.ts) (the puppy).
+
 ## install
 
 ```
