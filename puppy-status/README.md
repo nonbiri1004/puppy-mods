@@ -94,7 +94,7 @@ in `/config` → puppy-status:
 
 ## coming from puppy-sessions
 
-puppy-status is puppy-sessions (0.13) renamed and grown (0.14.0): it keeps every card puppy-sessions had, and adds `產線`, `排程` and the codex lock lines. puppy-todo is gone from this repository at the same time ([why](../README.md#puppy-todo-is-gone)).
+puppy-status is puppy-sessions (0.13) renamed and grown (0.14.0): it keeps every card puppy-sessions had, and adds `產線`, `排程` and the codex lock lines. puppy-todo was taken out at the same time and came back as only your own list ([puppy-todo is back](../README.md#puppy-todo-is-back)).
 
 1. `claude plugin marketplace update puppy-mods`
 2. `claude plugin install puppy-status@puppy-mods`
