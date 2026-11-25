@@ -19,7 +19,7 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1]) {
   })
   on('command.list', () => ({
     value: [
-      { name: 'console', description: 'Open the console', source: 'plugin', plugin: 'puppy-console@puppy-mods' },
+      { name: 'sessions', description: 'Open your conversations', source: 'plugin', plugin: 'puppy-sessions@puppy-mods' },
       { name: 'my-kit', description: 'see which skills and mods you have', source: 'plugin', plugin: 'puppy-skills@puppy-mods' },
       { name: 'my-skills', description: 'the old name of /my-kit', source: 'plugin', plugin: 'puppy-skills@puppy-mods' },
       { name: 'compact', description: 'Compact', source: 'builtin' },
@@ -47,7 +47,7 @@ test('/my-kit and its old name /my-skills both open the pane and list the mods',
   })
   const rows = (await ui.findAll({ type: 'Text' })).map(t => t.text).filter(t => t.startsWith('/'))
   // the old name is not listed twice; builtins are not mods
-  expect(rows.map(t => t.split(' ')[0])).toEqual(['/console', '/my-kit'])
+  expect(rows.map(t => t.split(' ')[0])).toEqual(['/my-kit', '/sessions'])
   expect((await ui.find({ type: 'Text', text: /0 skills · 2 mods/ }))?.text).toBeTruthy()
   await ui.unmount()
 })

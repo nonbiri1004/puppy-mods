@@ -21,7 +21,7 @@ export const BRAND: Palette = { light, dark }
 // Seeds: makeColors keeps each hue and sets the lightness itself. All come
 // from the brand or the puppy family; none is orange (in the brand, orange is
 // the puppy's headphones alone). accent: the night sky's grey-blue nebula;
-// success and warning: puppy-console's --ok and --listen; danger: a brick red
+// success and warning: STYLE.md's --ok and --listen; danger: a brick red
 // kept well away from the headphones' hue; pro: the dusk sky's grey violet.
 // The dusk sky's grey violet, at the bottom of the dusk sky and the seed of pro.
 // Not a brand color: worked out between the brand's charcoal and the night blue.
