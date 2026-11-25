@@ -49,7 +49,6 @@ const VIEW: View = {
   isShowingDone: false,
   at: NOW,
   notes: [],
-  openGroups: {},
 }
 
 test('the pane: one list with a tick and ✕ on each row, the add field, done folded', async ($, on) => {

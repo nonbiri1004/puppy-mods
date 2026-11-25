@@ -6,10 +6,13 @@ the things that wait for you outside the chat, in a quiet pane beside it: your o
 3 to-do                               refresh
 ╭─────────────────────────────────────────────╮
 │ [add a to-do…]                        [add] │
-│  ○  call the vet about the shots            │
-│  ○  decide where the coffee stand goes   ✕  │
+│  ○  call the vet about the shots         ★  │
+│  ○  decide where the coffee stand goes ☆ ✎ ✕│
 │  ○  set up the mods on the backup mac       │
 ╰─────────────────────────────────────────────╯
+deleted “buy a new lamp”                  undo
+▸ done 2
+▸ deleted 14
 ```
 
 on the desktop, the puppy moves beside the header: sitting and blinking while to-dos are open, sleeping when none are open. in the terminal, it is a still puppy in block characters, 34 columns × 13 rows, above the header. it is left out when the pane is shorter than 26 rows or narrower than 34 columns.
@@ -25,8 +28,12 @@ a thing belongs in this pane when it is still there after you close the conversa
 - **open it**: `/todo`. it doesn't open by itself.
 - **add**: the field at the top, or `/todo <text>`.
 - **tick** ○ when it's done. under `▸ done`, tick ☑ to open it again. done items stay there for three days.
-- **✕** to delete something you won't do. on the desktop it shows when the pointer is on the row.
-- **refresh** reads everything again, if you changed it in another window.
+- **✎** to change the words in place: `save` (or enter) keeps them, `cancel` leaves them. if another window changed them meanwhile, nothing is written and the field shows the new words.
+- **☆** pins an item to the top, in bold, as **★**; pressing ★ puts it back in its place. pinned items keep the order you pinned them in.
+- **✕** to delete something you won't do. one dim line under the list says what went, with `undo`. older ones are under `▸ deleted`, ten at a time, each with ↺ to bring it back as it was.
+- on the desktop, ☆ ✎ ✕ show when the pointer is on the row; they keep their room either way, so the words don't move.
+- while the pane is open the list is read again every 5 seconds, so a change in another window shows. **refresh** reads it at once.
+- a press that can't be saved says `could not save: …` in red; nothing else changes.
 
 this list is only yours. Claude doesn't add to it, tick it or read it: the mod gives Claude no tools. nothing else writes into it.
 
@@ -64,11 +71,11 @@ one small json file per item in `~/.claude/todo/items/`. the file name is the id
 ## how it works
 
 - **starts from**: `/todo` (registered at `session.start`). it opens the pane and, with text, adds an item. the pane does not open by itself; if it is already up when a session starts or reloads, it reads again.
-- **reads**: every `*.json` in `~/.claude/todo/items/` (a file that is not json, or has no `id` or text, is left out). it reads on `/todo`, on refresh and after each turn (`turn.complete`), and only while the pane is up. no timer.
-- **sorts**: open items oldest id first; done items newest first, for three days; deleted items and items an older version left for GitHub are dropped.
-- **draws**: one pane (`ui.render`, id `puppy-todo`): your list card, then `▸ done`.
-- **writes**: only your own item files, one json each: add, tick, untick, delete. a press reads the file again first, so a change from another window is not undone. the mod gives Claude no tools.
-- **when it fails**: a list that can't be read keeps the last one and says so in red at the bottom. each read is numbered, so a slow old read can't overwrite a newer one.
+- **reads**: every `*.json` in `~/.claude/todo/items/` (a file that is not json, or has no `id` or text, is left out). it reads on `/todo`, on refresh, after each press and every 5 seconds, only while the pane is up: each tick asks whether the pane is still open and stops the timer when it is not. a file whose `id` is not its file name is left out and named.
+- **sorts**: open items pinned first (in the order pinned), then by `createdAt` (the id when that is missing); done items newest first, for three days; deleted items newest first under `▸ deleted`; items an older version left for GitHub are dropped.
+- **draws**: one pane (`ui.render`, id `puppy-todo`): your list card, the undo line, `▸ done`, `▸ deleted`.
+- **writes**: only your own item files, one json each: add, tick, untick, edit (`editedAt`), pin (`pinnedAt`), delete, restore. writes from one window go one after another. a press reads the file again first, so a change from another window is not undone. the mod gives Claude no tools.
+- **when it fails**: a list that can't be read keeps the last one and says so in red at the bottom; one file that can't be read keeps its last read and is counted there. a write that fails says so in red. each read is numbered and each write makes reads in flight stale, so a slow old read can't put back what a press just changed. two windows writing the same item at the same instant can still race: the last write wins.
 - **where**: [register.tsx](hooks/register.tsx) (events, reading, the pane), [todo.ts](hooks/todo.ts) (items, ticking, sorting), [draw.ts](hooks/draw.ts) (the puppy).
 
 ## install
@@ -79,7 +86,7 @@ one small json file per item in `~/.claude/todo/items/`. the file name is the id
 
 ## coming back (1.3.0)
 
-puppy-todo was taken out of this repository on 2026-11-26 and put back the same day, as only your own list. the read-only board cards are gone: what a pipeline needs is in [puppy-status](../puppy-status/README.md)'s `產線` card. your items in `~/.claude/todo/items/` were never touched.
+puppy-todo was taken out of this repository on 2026-11-26 and put back the same day, as only your own list, now with edit, undo, pin and a 5-second refresh. the read-only board cards are gone: what a pipeline needs is in [puppy-status](../puppy-status/README.md)'s `產線` card. your items in `~/.claude/todo/items/` were never touched.
 
 ```
 claude plugin marketplace update puppy-mods

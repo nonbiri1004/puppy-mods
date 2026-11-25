@@ -17,6 +17,10 @@ export type Item = {
   declaration?: Declaration
   // when it was last opened again after being done
   reopenedAt?: string
+  // when its words were last changed
+  editedAt?: string
+  // pinned to the top of the list, and when
+  pinnedAt?: string
   // deleted: never shown, the file stays
   deletedAt?: string
   deletedBy?: string
@@ -37,8 +41,20 @@ export type View = {
   isShowingDone: boolean
   // ms since the epoch of the last read; null before the first
   at: number | null
-  // why the list could not be read
+  // why the list, or some files in it, could not be read
   notes: string[]
+  // why the last press could not be saved; cleared by the next one that is
+  saveError?: string | null
+  // the item whose words are being changed, and its words when that began
+  editingId?: string | null
+  editBase?: string
+  // a note on the edit field (changed in another window)
+  editNote?: string | null
+  // the last item deleted here, for undo
+  lastDeleted?: { id: string; text: string } | null
+  // the deleted list is unfolded, and how many of it show
+  isShowingDeleted?: boolean
+  deletedShown?: number
 }
 
 declare module 'claude-code' {

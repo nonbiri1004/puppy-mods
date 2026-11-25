@@ -23,6 +23,9 @@ export function projectOf(cwd: string): string {
   return repo.slice(repo.lastIndexOf('/') + 1) || repo
 }
 
+// an id is also its file's name: letters, digits, - _ and ., never a path
+export const isSafeId = (id: string) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) && !id.includes('..')
+
 // a file written by an older version, or by hand: keep what is usable (unknown fields too), drop the rest
 export function parseItem(text: string): Item | null {
   let raw: unknown
@@ -35,7 +38,7 @@ export function parseItem(text: string): Item | null {
     return null
   }
   const o = raw as Record<string, unknown>
-  if (typeof o.id !== 'string' || typeof o.text !== 'string' || o.text.trim() === '') {
+  if (typeof o.id !== 'string' || !isSafeId(o.id) || typeof o.text !== 'string' || o.text.trim() === '') {
     return null
   }
   const isObject = (v: unknown) => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -72,6 +75,29 @@ export function deleteItem(item: Item, at: string): Item {
   return { ...item, schemaVersion: 2, deletedAt: at, deletedBy: 'person' }
 }
 
+// new words for the same item: its id, place and when it was made stay
+export function editText(item: Item, text: string, at: string): Item {
+  return { ...item, schemaVersion: 2, text: text.trim(), editedAt: at }
+}
+
+// deleted by mistake: back where it was, open or done as before
+export function restoreItem(item: Item): Item {
+  const { deletedAt: _gone, deletedBy: _alsoGone, ...rest } = item
+
+  return { ...rest, schemaVersion: 2 }
+}
+
+// pinned items come first, in the order they were pinned
+export function pin(item: Item, at: string): Item {
+  return { ...item, schemaVersion: 2, pinnedAt: at }
+}
+
+export function unpin(item: Item): Item {
+  const { pinnedAt: _gone, ...rest } = item
+
+  return { ...rest, schemaVersion: 2 }
+}
+
 // an item an older version left for GitHub to tick when its PR merged: its file still says open even
 // after the merge, and this list doesn't ask GitHub, so it isn't shown
 export function isForGithub(item: Item): boolean {
@@ -83,13 +109,31 @@ export function isForGithub(item: Item): boolean {
 // when it was done: doneAt, or the time an older version kept only in declaration.at
 const doneAtOf = (i: Item) => i.doneAt ?? i.declaration?.at ?? ''
 
-// open ones oldest first, so nothing sinks; done ones newest first, for a few days
-export function listOf(items: readonly Item[], now: number): { open: Item[]; done: Item[] } {
-  const kept = items.filter(i => !i.deletedAt && !isForGithub(i))
-  const open = kept.filter(i => i.status === 'open').sort((a, b) => a.id.localeCompare(b.id))
+// when it was made, to the millisecond: createdAt, or the minute in an older id
+const madeAt = (i: Item) => {
+  const t = Date.parse(i.createdAt)
+
+  return Number.isNaN(t) ? null : t
+}
+const byMade = (a: Item, b: Item) => {
+  const ta = madeAt(a)
+  const tb = madeAt(b)
+
+  return ta !== null && tb !== null && ta !== tb ? ta - tb : a.id.localeCompare(b.id)
+}
+
+// open ones: pinned first (in the order pinned), then oldest first, so nothing sinks; done ones
+// newest first, for a few days; deleted ones newest first, for the folded list you restore from
+export function listOf(items: readonly Item[], now: number): { open: Item[]; done: Item[]; deleted: Item[] } {
+  const mine = items.filter(i => !isForGithub(i))
+  const kept = mine.filter(i => !i.deletedAt)
+  const isOpen = (i: Item) => i.status === 'open'
+  const pinned = kept.filter(i => isOpen(i) && i.pinnedAt).sort((a, b) => (a.pinnedAt ?? '').localeCompare(b.pinnedAt ?? '') || byMade(a, b))
+  const rest = kept.filter(i => isOpen(i) && !i.pinnedAt).sort(byMade)
   const done = kept
     .filter(i => i.status === 'done' && doneAtOf(i) !== '' && now - Date.parse(doneAtOf(i)) < DONE_DAYS * DAY)
     .sort((a, b) => doneAtOf(b).localeCompare(doneAtOf(a)))
+  const deleted = mine.filter(i => i.deletedAt).sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''))
 
-  return { open, done }
+  return { open: [...pinned, ...rest], done, deleted }
 }

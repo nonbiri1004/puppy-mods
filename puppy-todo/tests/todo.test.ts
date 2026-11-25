@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Item } from '../types'
-import { deleteItem, isForGithub, listOf, newId, parseItem, projectOf, reopen, tick } from '../hooks/todo'
+import { deleteItem, editText, isForGithub, isSafeId, listOf, newId, parseItem, pin, projectOf, reopen, restoreItem, tick, unpin } from '../hooks/todo'
 
 const NOW = Date.parse('2026-10-27T10:00:00Z')
 const AT = new Date(NOW).toISOString()
@@ -69,4 +69,37 @@ test('Codex #1: an item an older version left for GitHub to tick is not shown', 
   const linked = { ...item({ id: 'link' }), link: 'https://github.com/you/app/pull/8', completion: { mode: 'declared' } } as Item
   expect([pr, byMode, linked].map(isForGithub)).toEqual([true, true, false])
   expect(listOf([pr, byMode, linked], NOW).open.map(i => i.id)).toEqual(['link'])
+})
+
+test('edit keeps the id, the time it was made and unknown fields; restore and pin change only their own fields', () => {
+  const x = { ...item({ id: 'x', text: 'old', createdAt: '2026-10-27T01:00:00Z' }), link: 'https://x' } as Item
+  expect(editText(x, '  new words ', AT)).toMatchObject({ id: 'x', text: 'new words', createdAt: '2026-10-27T01:00:00Z', editedAt: AT, link: 'https://x' })
+  const gone = deleteItem({ ...x, status: 'done' }, AT)
+  const back = restoreItem(gone)
+  expect(back.deletedAt).toBe(undefined)
+  expect(back.deletedBy).toBe(undefined)
+  expect(back.status).toBe('done')
+  expect(unpin(pin(x, AT)).pinnedAt).toBe(undefined)
+})
+
+test('the list: pinned first in the order pinned, then by the time made (same minute too), deleted newest first', () => {
+  const { open, deleted } = listOf(
+    [
+      item({ id: '20261027-0900-weee', createdAt: '2026-10-27T09:00:01.000Z' }),
+      item({ id: '20261027-0900-3lll', createdAt: '2026-10-27T09:00:40.000Z' }),
+      item({ id: 'p2', pinnedAt: '2026-10-27T09:30:00Z', createdAt: '2026-10-20T00:00:00Z' }),
+      item({ id: 'p1', pinnedAt: '2026-10-27T09:10:00Z', createdAt: '2026-10-26T00:00:00Z' }),
+      item({ id: 'x1', deletedAt: '2026-10-27T08:00:00Z' }),
+      item({ id: 'x2', deletedAt: '2026-10-27T09:00:00Z', status: 'done' }),
+    ],
+    NOW,
+  )
+  expect(open.map(i => i.id)).toEqual(['p1', 'p2', '20261027-0900-weee', '20261027-0900-3lll'])
+  expect(deleted.map(i => i.id)).toEqual(['x2', 'x1'])
+})
+
+test('an id is a file name, never a path', () => {
+  expect(['20261027-0900-k3f9', 'a.b_c'].map(isSafeId)).toEqual([true, true])
+  expect(['../outside', 'a/b', '', '.hidden', 'a..b'].map(isSafeId)).toEqual([false, false, false, false, false])
+  expect(parseItem(JSON.stringify({ id: '../outside', text: 'x' }))).toBe(null)
 })
