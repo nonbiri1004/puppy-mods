@@ -6,9 +6,9 @@ the things that wait for you outside the chat, in a quiet pane beside it: your o
 3 to-do                               refresh
 ╭─────────────────────────────────────────────╮
 │ [add a to-do…]                        [add] │
-│  ○  call the vet about the shots     📌 ✎ ✕  │
-│  ○  decide where the coffee stand goes 📌 ✎ ✕│
-│  ○  set up the mods on the backup mac 📌 ✎ ✕ │
+│  ○  call the vet about the shots     ⍑ ✎ ✕  │
+│  ○  decide where the coffee stand goes ⍑ ✎ ✕│
+│  ○  set up the mods on the backup mac ⍑ ✎ ✕ │
 ╰─────────────────────────────────────────────╯
 deleted “buy a new lamp”                  undo
 ▸ done 2
@@ -29,9 +29,9 @@ a thing belongs in this pane when it is still there after you close the conversa
 - **add**: the field at the top, or `/todo <text>`.
 - **tick** ○ when it's done. under `▸ done`, tick ☑ to open it again. done items stay there for three days.
 - **✎** to change the words in place: `save` (or enter) keeps them, `cancel` leaves them. if another window changed them meanwhile, nothing is written and the field shows the new words.
-- **📌** pins an item to the top, in bold; press 📌 again to put it back in its place. pinned items keep the order you pinned them in.
+- **⍑** pins an item to the top, in bold; press ⍑ again to put it back in its place. pinned items keep the order you pinned them in.
 - **✕** to delete something you won't do. one dim line under the list says what went, with `undo`. older ones are under `▸ deleted`, ten at a time, each with ↺ to bring it back as it was.
-- 📌 ✎ ✕ are always there, dim, at the end of each row.
+- ⍑ ✎ ✕ are always there, dim, at the end of each row.
 - while the pane is open the list is read again every 5 seconds, so a change in another window shows. **refresh** reads it at once.
 - a press that can't be saved says `could not save: …` in red; nothing else changes.
 

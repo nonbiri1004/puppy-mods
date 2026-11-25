@@ -332,7 +332,7 @@ export const register: Register = on => {
           </Box>
           <Box flexShrink={0} width={Input ? 8 : 5} flexDirection="row" justifyContent="flex-end" gap={1}>
             <Box>
-              <Button key={`pin-${i.id}`} label="📌" plain dimColor={!isPinned} onPress={() => press($, i.id, isPinned ? 'unpin' : 'pin')} />
+              <Button key={`pin-${i.id}`} label="⍑" plain dimColor={!isPinned} onPress={() => press($, i.id, isPinned ? 'unpin' : 'pin')} />
             </Box>
             {Input ? (
               <Box>
@@ -407,7 +407,7 @@ export const register: Register = on => {
             />
             {v.isShowingDone
               ? done.map(i => (
-                  <Box key={`d-${i.id}`} flexDirection="row" gap={1}>
+                  <Box key={`d-${i.id}`} flexDirection="row" gap={1} paddingLeft={2}>
                     <Box width={3} flexShrink={0} justifyContent="center">
                       <Button key={`untick-${i.id}`} label="☑" plain dimColor onPress={() => press($, i.id, 'open')} />
                     </Box>
@@ -432,7 +432,7 @@ export const register: Register = on => {
             />
             {v.isShowingDeleted
               ? shownDeleted.map(i => (
-                  <Box key={`x-${i.id}`} flexDirection="row" gap={1}>
+                  <Box key={`x-${i.id}`} flexDirection="row" gap={1} paddingLeft={2}>
                     <Box width={3} flexShrink={0} justifyContent="center">
                       <Button key={`restore-${i.id}`} label="↺" plain dimColor onPress={() => press($, i.id, 'restore')} />
                     </Box>
