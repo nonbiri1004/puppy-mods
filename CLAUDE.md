@@ -3,7 +3,7 @@
 lofi puppy 維護的 Claude Code 小 mod，一個 mod 一個資料夾。這個 repo 是**公開的**：不放私人路徑、金鑰或品牌文件。
 
 ## 規則
-- **畫任何 pane、band 或圖之前，先讀 `STYLE.md`**，照著做。新的 mod 長得跟 `puppy-sessions` 一樣。
+- **畫任何 pane、band 或圖之前，先讀 `STYLE.md`**，照著做。新的 mod 長得跟 `puppy-status` 一樣。
 - **白白要出現在新的地方（新的 pane、新的 surface、新的大小）之前，先讀 baibai-brand 的 `docs/品牌風格.md`〈白白的造型〉和 `docs/characters.md`**。repo 裡現有的寫法不一定是品牌規定；兩邊不一樣時照品牌，在 PR 裡說。
 - 產生出來的檔案（`<mod>/hooks/puppy.ts`、`<mod>/hooks/puppy-blocks.ts`、`brand.lock.json`）絕對不要手改；改 baibai-brand 再同步。
 - 每個 mod 的測試放在 `<mod>/tests/`；開 PR 前先跑 `claude plugin test <mod>` 和 `claude plugin validate <mod>`。

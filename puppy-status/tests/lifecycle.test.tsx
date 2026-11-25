@@ -64,9 +64,9 @@ function conversation(on: On, env: Record<string, string> = {}) {
   })
   on('classic.SessionStart', () => ({}) as never)
   on('classic.UserPromptSubmit', () => ({}) as never)
-  on('command.register', () => ({ value: { command: 'sessions' } }))
+  on('command.register', () => ({ value: { command: 'my-status' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('ui.panes', () => ({ value: [{ id: 'puppy-sessions', title: 'sessions', isShown: true, isFocused: false, isPlaced: true }] }))
+  on('ui.panes', () => ({ value: [{ id: 'puppy-status', title: 'status', isShown: true, isFocused: false, isPlaced: true }] }))
   on('store.keys', () => ({ value: [...w.store.keys()] }))
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
@@ -74,7 +74,7 @@ function conversation(on: On, env: Record<string, string> = {}) {
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
-  const file = () => parseConversation(w.written[`/home/me/.claude/puppy-sessions/${w.id}.json`]!)
+  const file = () => parseConversation(w.written[`/home/me/.claude/puppy-status/${w.id}.json`]!)
   return { w, clock, file }
 }
 
@@ -305,15 +305,15 @@ test('a /clear between the turn and its write keeps the recap in the old file', 
   w.gate = null
   release()
   await clock.settle()
-  expect(parseConversation(w.written['/home/me/.claude/puppy-sessions/abc.json']!).recap).toBe('Old topic done.')
-  expect(w.written['/home/me/.claude/puppy-sessions/def.json']).toBeUndefined()
+  expect(parseConversation(w.written['/home/me/.claude/puppy-status/abc.json']!).recap).toBe('Old topic done.')
+  expect(w.written['/home/me/.claude/puppy-status/def.json']).toBeUndefined()
 })
 
 const PANE = {
-  plugin: 'puppy-sessions', component: 'Pane', requestId: 'puppy-sessions', surface: 'terminal',
-  props: { title: 'sessions', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+  plugin: 'puppy-status', component: 'Pane', requestId: 'puppy-status', surface: 'terminal',
+  props: { title: 'status', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
-const RUN = { command: 'sessions', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } } as const
+const RUN = { command: 'my-status', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } } as const
 
 test('a write that fails is said in this conversation\'s pane, and the next good one clears it', async ($, on) => {
   const { w, clock } = conversation(on)
@@ -339,23 +339,39 @@ test('puppy-console\'s old files are copied over once; the ones already here are
   const old = '/home/me/.claude/console/sessions'
   w.written[`${old}/a.json`] = 'old a'
   w.written[`${old}/b.json`] = 'old b'
-  w.written['/home/me/.claude/puppy-sessions/b.json'] = 'new b'
+  w.written['/home/me/.claude/puppy-status/b.json'] = 'new b'
   // older than two weeks: never shown, so not copied
   w.written[`${old}/z.json`] = 'old z'
   w.mtimes[`${old}/z.json`] = T - 15 * 24 * 3_600_000
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await clock.settle()
-  expect(w.written['/home/me/.claude/puppy-sessions/a.json']).toBe('old a')
-  expect(w.written['/home/me/.claude/puppy-sessions/b.json']).toBe('new b')
-  expect(w.written['/home/me/.claude/puppy-sessions/z.json']).toBeUndefined()
+  expect(w.written['/home/me/.claude/puppy-status/a.json']).toBe('old a')
+  expect(w.written['/home/me/.claude/puppy-status/b.json']).toBe('new b')
+  expect(w.written['/home/me/.claude/puppy-status/z.json']).toBeUndefined()
   expect(w.written[`${old}/a.json`]).toBe('old a')
-  expect(stored.get('migrated:console')).toBe(true)
+  expect(stored.get('migrated:puppy-sessions')).toBe(true)
 
   // once done, never again: a file the old mod writes later stays where it is
   w.written[`${old}/c.json`] = 'old c'
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await clock.settle()
-  expect(w.written['/home/me/.claude/puppy-sessions/c.json']).toBeUndefined()
+  expect(w.written['/home/me/.claude/puppy-status/c.json']).toBeUndefined()
+})
+
+test('puppy-sessions\' files are copied first; puppy-console\'s fill in only the names puppy-sessions did not have', async ($, on) => {
+  const { w, clock } = conversation(on)
+  const sessions = '/home/me/.claude/puppy-sessions'
+  const consoleDir = '/home/me/.claude/console/sessions'
+  w.written[`${sessions}/a.json`] = 'sessions a'
+  w.written[`${consoleDir}/a.json`] = 'console a'
+  w.written[`${consoleDir}/b.json`] = 'console b'
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.settle()
+  expect(w.written['/home/me/.claude/puppy-status/a.json']).toBe('sessions a')
+  expect(w.written['/home/me/.claude/puppy-status/b.json']).toBe('console b')
+  // both old folders stay as they were
+  expect(w.written[`${sessions}/a.json`]).toBe('sessions a')
+  expect(w.store.get('migrated:puppy-sessions')).toBe(true)
 })
 
 test('no old folder: nothing to copy, and it counts as done', async ($, on) => {
@@ -363,7 +379,7 @@ test('no old folder: nothing to copy, and it counts as done', async ($, on) => {
   const stored = w.store
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await clock.settle()
-  expect(stored.get('migrated:console')).toBe(true)
+  expect(stored.get('migrated:puppy-sessions')).toBe(true)
 })
 
 test('Codex #2: a conversation\'s first write waits for the copy, and the copy never writes over it', async ($, on) => {

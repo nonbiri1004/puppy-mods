@@ -6,15 +6,15 @@ const T = Date.parse('2026-11-23T12:00:00+08:00')
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
 const at = (ms: number) => new Date(T - ms).toISOString()
-const SESSIONS = '/home/me/.claude/puppy-sessions'
+const SESSIONS = '/home/me/.claude/puppy-status'
 const APP = '/home/me/Library/Application Support/Claude/claude-code-sessions'
 const CODEX = '/home/me/.codex/sessions'
-const RUN = { command: 'sessions', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } } as const
+const RUN = { command: 'my-status', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } } as const
 const PANE = {
-  plugin: 'puppy-sessions',
+  plugin: 'puppy-status',
   component: 'Pane',
-  requestId: 'puppy-sessions',
-  props: { title: 'sessions', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+  requestId: 'puppy-status',
+  props: { title: 'status', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
 const rows = (bodyRows: number, bodyColumns = 80) => ({ ...PANE.props, bodyColumns, scroll: { offset: 0, bodyRows } })
 // The text an element description shows, its nested Texts included.
@@ -50,7 +50,10 @@ function world(on: On) {
     panesAsked: 0,
     opened: [] as Record<string, unknown>[],
     selfId: 'me',
-    store: new Map<string, unknown>([['migrated:console', true]]),
+    store: new Map<string, unknown>([['migrated:puppy-sessions', true]]),
+    // any other file, by its full path: the status folder, the schedule logs, the Codex lock
+    other: {} as Record<string, string>,
+    otherTimes: {} as Record<string, number>,
   }
   mock.env(on, { HOME: '/home/me' })
   const clock = mock.clock(on, { now: T })
@@ -68,15 +71,24 @@ function world(on: On) {
       const names = [...new Set(below.map(p => p.split('/')[0]!))]
       return { value: names.map(n => (below.includes(n) ? entry(n, 'file', w.codex[dir + n]!.length) : entry(n, 'dir'))) }
     }
+    const dir = `${e.path}/`
+    const below = Object.keys(w.other).filter(p => p.startsWith(dir)).map(p => p.slice(dir.length))
+    if (below.length) {
+      const names = [...new Set(below.map(p => p.split('/')[0]!))]
+      return { value: names.map(n => (below.includes(n) ? entry(n, 'file', w.other[dir + n]!.length, w.otherTimes[dir + n] ?? T) : entry(n, 'dir'))) }
+    }
     return { deny: 'ENOENT: no such file or directory' }
   })
-  on('fs.stat', (_, e) => (e.path.startsWith(APP) && w.app[e.path.slice(APP.length + 1, -'.json'.length)] != null
-    ? { value: { kind: 'file', size: 1, mtimeMs: T, realPath: e.path } as never }
-    : { deny: 'ENOENT: no such file or directory' }))
+  on('fs.stat', (_, e) => {
+    if (e.path.startsWith(APP) && w.app[e.path.slice(APP.length + 1, -'.json'.length)] != null) return { value: { kind: 'file', size: 1, mtimeMs: T, realPath: e.path } as never }
+    if (e.path in w.other) return { value: { kind: 'file', size: w.other[e.path]!.length, mtimeMs: w.otherTimes[e.path] ?? T, realPath: e.path } as never }
+    if (Object.keys(w.other).some(p => p.startsWith(`${e.path}/`))) return { value: { kind: 'dir', size: 0, mtimeMs: w.otherTimes[e.path] ?? T, realPath: e.path } as never }
+    return { deny: 'ENOENT: no such file or directory' }
+  })
   on('fs.read', (_, e) => {
     const text = e.path.startsWith(`${SESSIONS}/`) ? w.files[e.path.slice(SESSIONS.length + 1)]
       : e.path.startsWith(`${APP}/`) ? w.app[e.path.slice(APP.length + 1, -'.json'.length)]
-      : w.codex[e.path]
+      : w.codex[e.path] ?? w.other[e.path]
     if (text == null) throw new Error('ENOENT: missing')
     const { offset, length } = e as { offset?: number; length?: number }
     return { value: offset != null ? text.slice(offset, offset + (length ?? text.length)) : text }
@@ -89,13 +101,13 @@ function world(on: On) {
   on('ui.open', (_, e) => { w.isOpen = true; w.opened.push(e as unknown as Record<string, unknown>); return { value: { isPlaced: true } } })
   on('ui.panes', () => {
     w.panesAsked++
-    return { value: w.isOpen ? [{ id: 'puppy-sessions', title: 'sessions', isShown: true, isFocused: false, isPlaced: true }] : [] }
+    return { value: w.isOpen ? [{ id: 'puppy-status', title: 'status', isShown: true, isFocused: false, isPlaced: true }] : [] }
   })
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
   on('store.delete', (_, e) => { w.store.delete(e.key); return { value: undefined } })
   on('store.keys', () => ({ value: [...w.store.keys()] }))
-  on('command.register', () => ({ value: { command: 'sessions' } }))
+  on('command.register', () => ({ value: { command: 'my-status' } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   return { w, clock }
 }
@@ -106,11 +118,11 @@ const open = async ($: Parameters<TestBody>[0], surface: 'terminal' | 'desktop' 
   return $.ui.mount({ ...PANE, surface })
 }
 
-test('/sessions opens the pane, room for the puppy and the list on the terminal', async ($, on) => {
+test('/my-status opens the pane, room for the puppy and the list on the terminal', async ($, on) => {
   const { w } = world(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  expect((await $.command.run(RUN)).text).toBe('對話總覽已打開。')
-  expect(w.opened[0]).toMatchObject({ id: 'puppy-sessions', title: 'sessions', rows: 40 })
+  expect((await $.command.run(RUN)).text).toBe('狀態已打開。')
+  expect(w.opened[0]).toMatchObject({ id: 'puppy-status', title: 'status', rows: 40 })
 })
 
 test('the files are read only while the pane is open, once a minute, one timer', async ($, on) => {
@@ -122,7 +134,7 @@ test('the files are read only while the pane is open, once a minute, one timer',
   expect(w.lists).toBe(1)
   await clock.advance(60_000)
   expect(w.lists).toBe(2)
-  // a second /sessions starts the timer over: still one read a minute
+  // a second /my-status starts the timer over: still one read a minute
   await $.command.run(RUN)
   const before = w.lists
   await clock.advance(60_000)
@@ -359,4 +371,108 @@ test('Codex #6: a run from yesterday written after today\'s gives the reading', 
   const ui = await open($)
   expect(textOf(await ui.find({ key: 'card-usage' }))).toMatch(/5 小時 90%/)
   await ui.unmount()
+})
+
+// a schedule log line's stamp: this computer's own time, no offset
+const stamp = (ms: number) => {
+  const d = new Date(ms)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+const LOGS = '/home/me/logs'
+const STATUS = '/home/me/status'
+const pipeline = (over: Record<string, unknown>) => JSON.stringify({
+  format: 'pipeline-status', version: 1, pipeline: 'music', updated: at(60_000), state: 'running', headline: 'making songs', ...over,
+})
+
+test('產線 shows only the pipelines that need a look; 排程 says each job\'s last run', { options: { status_dir: '~/status', schedule_logs: '~/logs', schedule_every: 'daily 1d, weekly 7d' } }, async ($, on) => {
+  const { w } = world(on)
+  w.other = {
+    [`${STATUS}/music.json`]: pipeline({}),
+    [`${STATUS}/collector-tech-news.json`]: pipeline({ pipeline: 'collector-tech-news', title: '科技選題', state: 'error', headline: '收集 0', updated: at(6 * DAY) }),
+    [`${STATUS}/live.json`]: pipeline({ pipeline: 'live', title: '音樂直播', stale_after_sec: 600, updated: at(HOUR) }),
+    [`${STATUS}/ai-video.json`]: pipeline({ pipeline: 'ai-video', state: 'waiting', updated: at(20 * DAY) }),
+    [`${STATUS}/notes.json`]: '{"something": "else"}',
+    [`${LOGS}/daily.log`]: `===== ${stamp(T - 3 * DAY)} daily 開始\n--- step\n===== ${stamp(T - 3 * DAY + 60_000)} daily 結束：成功\n`,
+    [`${LOGS}/weekly.log`]: `===== ${stamp(T - 2 * DAY)} weekly 開始\n===== ${stamp(T - 2 * DAY + 9_000)} weekly 結束：有錯誤\n`,
+    [`${LOGS}/watch.log`]: `===== ${stamp(T - 5 * 60_000)} watch 開始\n===== ${stamp(T - 4 * 60_000)} watch 結束：成功\n===== ${stamp(T - 60_000)} watch 開始\n`,
+    [`${LOGS}/launchd.log`]: '',
+  }
+  const ui = await open($, 'terminal')
+  const alarms = textOf(await ui.find({ key: 'card-alarms' }))
+  expect(alarms).toContain('2 條要看')
+  expect(alarms).toContain('科技選題')
+  expect(alarms).toContain('出錯 · 6 天')
+  expect(alarms).toContain('音樂直播')
+  expect(alarms).toContain('沒更新 · 1 小時')
+  expect(alarms).not.toContain('music')          // running and fresh: fine, not shown
+  expect(alarms).not.toContain('ai-video')       // old, but it set no stale_after_sec and is not an error
+
+  const schedules = textOf(await ui.find({ key: 'card-schedules' }))
+  expect(schedules).toContain('daily')
+  expect(schedules).toContain('該跑沒跑 · 上次 3 天前')
+  expect(schedules).toContain('有錯誤 · 2 天前')
+  expect(schedules).toContain('跑中 · 1 分鐘')
+  expect(schedules).not.toContain('launchd')     // an empty log names no job
+  const texts = await ui.findAll({ type: 'Text' })
+  expect(texts.some(t => t.props.color === 'error' && textOf(t) === '該跑沒跑')).toBe(true)
+  expect(texts.some(t => t.props.color === 'success' && textOf(t) === '跑中')).toBe(true)
+})
+
+test('no folders set: no 產線 or 排程 card; a folder set but missing is said in red', { options: { schedule_logs: '~/nowhere' } }, async ($, on) => {
+  world(on)
+  const ui = await open($)
+  expect(await ui.find({ key: 'card-alarms' })).toBeFalsy()
+  expect(await ui.find({ key: 'card-schedules' })).toBeFalsy()
+  const bad = (await ui.findAll({ type: 'Text' })).find(t => textOf(t).startsWith('讀不到 ~/nowhere'))
+  expect(bad?.props.color).toBe('error')
+})
+
+test('all pipelines fine: no 產線 card at all', { options: { status_dir: '~/status' } }, async ($, on) => {
+  const { w } = world(on)
+  w.other = { [`${STATUS}/music.json`]: pipeline({}) }
+  const ui = await open($)
+  expect(await ui.find({ key: 'card-alarms' })).toBeFalsy()
+})
+
+test('a status file caught halfway through a write keeps its last alarm', { options: { status_dir: '~/status' } }, async ($, on) => {
+  const { w, clock } = world(on)
+  w.other = { [`${STATUS}/c.json`]: pipeline({ pipeline: 'c', state: 'error' }) }
+  const ui = await open($)
+  expect(textOf(await ui.find({ key: 'card-alarms' }))).toContain('出錯')
+  w.other[`${STATUS}/c.json`] = '{"format": "pipeline-sta'
+  await clock.advance(60_000)
+  await clock.settle()
+  expect(textOf(await ui.find({ key: 'card-alarms' }))).toContain('出錯')
+})
+
+test('the Codex lock and limit show under the limits; a lock held over an hour may not have been let go', async ($, on) => {
+  const { w } = world(on)
+  w.codex = { [`${CODEX}/2026/11/22/run-a.jsonl`]: `${codexLine(22, T - 3 * HOUR)}\n` }
+  w.other = {
+    '/home/me/.codex/collab.lock/owner': `T203 ${stamp(T - 12 * 60_000)}\n`,
+    '/home/me/.codex/collab-limit': '2026-11-23 15:00 5 小時 T201\n',
+  }
+  let ui = await open($)
+  let usage = textOf(await ui.find({ key: 'card-usage' }))
+  expect(usage).toContain('Codex 使用中 · T203')
+  expect(usage).toContain('12 分鐘')
+  expect(usage).toContain('Codex 撞額度 · 2026-11-23 15:00 5 小時 T201')
+  await ui.unmount()
+
+  w.other = { '/home/me/.codex/collab.lock/owner': `T190 ${stamp(T - 2 * HOUR)}` }
+  await $.command.run(RUN)
+  ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  usage = textOf(await ui.find({ key: 'card-usage' }))
+  expect(usage).toContain('可能沒放 · 2 小時')
+  expect(usage).not.toContain('撞額度')
+})
+
+test('neither Codex file: no lock or limit line', async ($, on) => {
+  const { w } = world(on)
+  w.codex = { [`${CODEX}/2026/11/22/run-a.jsonl`]: `${codexLine(22, T - 3 * HOUR)}\n` }
+  const ui = await open($)
+  const usage = textOf(await ui.find({ key: 'card-usage' }))
+  expect(usage).not.toContain('使用中')
+  expect(usage).not.toContain('撞額度')
 })

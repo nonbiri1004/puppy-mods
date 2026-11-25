@@ -79,3 +79,22 @@ export function limitText(l: Limit, now: number): string {
 
 // How old Codex's reading is: Codex writes one only while it runs.
 export const readText = (readAt: number | null, now: number) => (readAt == null ? '' : ago(now - readAt))
+
+// Who holds Codex now and whether it hit its limit, from two small files a person's own scripts
+// may keep beside Codex (FORMAT.md, "codex lock"); Codex itself writes neither. Taking the lock is a
+// folder made with mkdir, with "<who> <YYYY-MM-DD HH:MM:SS>" in its owner file; hitting the limit
+// is one line, "<when it resets> <which window> <who>", kept until someone deletes it.
+export const CODEX_LOCK = '.codex/collab.lock'
+export const CODEX_LIMIT = '.codex/collab-limit'
+// A lock held this long, with no Codex run to show for it, was probably not let go.
+export const LOCK_OLD_MS = 60 * 60_000
+
+// "T203 2026-11-25 19:08:31" → { owner: "T203", since }; the time is the computer's own. An owner
+// file without a time (or none at all) leaves the folder's own time as when.
+export function lockOf(owner: string, folderTime: number | null): NonNullable<Usage['hold']>['lock'] {
+  const line = owner.split('\n').find(l => l.trim())?.trim() ?? ''
+  const m = line.match(/^(.*?)\s*(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d)(?::(\d\d))?\s*$/)
+  if (!m) return { owner: line, since: folderTime }
+  const since = new Date(+m[2]!, +m[3]! - 1, +m[4]!, +m[5]!, +m[6]!, +(m[7] ?? 0)).getTime()
+  return { owner: m[1]!.trim(), since }
+}

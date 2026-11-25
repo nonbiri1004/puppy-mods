@@ -10,8 +10,8 @@ a writer (a pipeline, a board, a script) writes one small json file into a share
 
 ## who reads what
 
-- **[puppy-todo](puppy-todo)** (setting `status_dir`, empty by default): one read-only card per file that has `waiting` items, under your own list. it reads `title`, `updated`, `waiting` (`id`, `text`, `since`, `group`, `url`, `due`) and `waiting_groups`; nothing else. it reads the folder while its pane is open (once on `/todo`, then every minute).
-- **[puppy-sessions](puppy-sessions)** reads no status files: it shows your claude conversations, from files of a different format, in [its FORMAT.md](puppy-sessions/FORMAT.md). (as puppy-console, up to 0.12, it read every field below, a card per pipeline.)
+- **[puppy-status](puppy-status)** (setting `status_dir`, empty by default): only the pipelines that need a look, on its `產線` card: `state` `error`, a file older than its `stale_after_sec`, and the `live` pipeline's `detail.restarts_24h` over 1 (below, "known details"). it reads `pipeline`, `title`, `updated`, `stale_after_sec`, `state`, `headline` and those two `detail` fields; nothing else. it reads every `*.json` in the folder itself (not its subfolders) while its pane is open (once on `/my-status`, then every minute). its own conversation files are a different format, in [its FORMAT.md](puppy-status/FORMAT.md).
+- no mod reads `waiting`, `waiting_groups`, `sections`, `progress`, `last_output`, `next` or the rest of `detail` now. puppy-todo (up to 1.2.0, now gone) read `waiting` and `waiting_groups` as a read-only card; puppy-console (up to 0.12) read every field, a card per pipeline. the fields stay here so the writers keep one agreement, and a board (such as projects-map's) can still read them.
 
 a mod never runs a writer and never writes into the folder. an item leaves a card only when its writer stops listing it. the most a button does is open a link or a file to look at, or put words in the prompt box (see `url` and `actions`, below).
 
@@ -68,7 +68,7 @@ a mod never runs a writer and never writes into the folder. an item leaves a car
 | `group` | no | the `id` of one of `waiting_groups`, below |
 | `url` | no | one `https://` link to look at, at most 2048 characters (a pull request, an issue, a page). a reader draws it as a link, e.g. `↗ #98` for a GitHub pull request or issue. any other scheme is left out |
 | `due` | no | when it should be done by: an iso 8601 time with the offset. a deadline that names only a day is that day's end, `23:59` (`2026-11-30T23:59:00+08:00`). a writer may leave a passed `due` out. a reader shows the day (`到 11/30`), may mark it once it has passed, and also accepts a bare date `YYYY-MM-DD` (read as the end of that day) |
-| `actions` | no | buttons, below. a read-only reader (puppy-todo) leaves them out |
+| `actions` | no | buttons, below. a read-only reader leaves them out |
 
 new in version 1: `url` and `due`. older files and older mods simply leave them out.
 
@@ -122,10 +122,11 @@ a pipeline that wants more than one line can name a few lists. no puppy mod draw
 
 ## known details
 
-puppy-console, up to 0.12, drew these when `pipeline` matched; no puppy mod draws them now. they stay here so the writers keep one agreement.
+puppy-console, up to 0.12, drew the `music`, `ai-video` and `collector-*` details when `pipeline` matched; no puppy mod draws those now. puppy-status reads only `live`'s, below. they all stay here so the writers keep one agreement.
 
 - `music`: `{ comfy: { up, running, pending }, generating, batches: [{ name, strip, est_usable, target_usable, generated, ok, needs_listen, rejected, errors, avg_gen_sec, status_tail }] }`. `strip` has one letter per song: `o` ok, `l` to hear, `r` rejected, `x` left out, `e` failed, `?` being checked. the pipeline's details show the first batch: its name, then made · ok · to hear · rejected (and failed, and the minutes per song).
 - `ai-video`: `{ spend_usd, cap_usd, jobs: [{ job, stage, spend_usd, cap_usd, updated, next }] }`. `stage` is `plan`, `clips`, `voice`, `compose`, `final` or `done` (ai-video-pipeline also writes `deliver`: the final was approved but copying it out failed; puppy-console never drew that stage); the pipeline's details count the jobs at every stage, then the spend, and name them by stage.
+- `live` (the 24-hour music stream): `{ restarts_24h, last_exit, runs, started }`. puppy-status reads `restarts_24h` (how many times the stream was restarted in the last 24 hours) and, when that is over 1, shows the pipeline on its `產線` card with `last_exit` (the last exit code). never put the stream's command line here: it holds the stream key.
 - `collector-*` (info-collector, one file per profile, e.g. `collector-tech-news`; matched by the prefix): `{ counts: { collected, new, scored, sent, unsent, pending }, errors: [text] }`.
   - `collected`, `new`, `scored` and `sent` are this run. `scored` can be more than `new` (older unscored items are scored too), and `sent` can be more than `scored` (earlier runs' picks).
   - `unsent`: high-scored items not in notion yet (sent next run, or refused).

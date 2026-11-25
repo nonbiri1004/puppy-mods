@@ -24,7 +24,7 @@ export type Skill = {
   uses: Use[]
 }
 
-// a slash command a mod adds in code ($.command.register), not a SKILL.md: /sessions, /todo
+// a slash command a mod adds in code ($.command.register), not a SKILL.md: /my-status
 export type Mod = {
   // mod:<plugin>:<name>, unique in the list
   id: string

@@ -49,7 +49,7 @@ export function mascot(mood: Mood): string {
 // each character holds two pixels stacked, as Claude Code draws its mascot. One still frame per
 // mood: redrawing the pane a few times a second would flicker, and the puppy moves slowly anyway.
 // The pane's rows (e.props.scroll.bodyRows) the block puppy needs: its 13 rows take at most half.
-// Shorter, it is left out, never shrunk. puppy-todo and puppy-skills use the same number.
+// Shorter, it is left out, never shrunk. puppy-skills uses the same number.
 export const PUPPY_MIN_ROWS = 26
 // The columns (e.props.bodyColumns) it needs: a narrower pane would wrap its rows apart.
 export const PUPPY_COLUMNS = 34
