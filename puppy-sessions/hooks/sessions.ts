@@ -153,7 +153,8 @@ export function parseConversation(text: string): Conversation {
     ...(v.isAppTitle === true ? { isAppTitle: true } : {}),
     ...(v.isFork === true ? { isFork: true } : {}),
     ...(SOURCES.includes(v.source as Source) ? { source: v.source as Source } : {}),
-    ...(str(v.task) ? { task: str(v.task) } : {}),
+    // a file from puppy-console 0.12 has no task id: its title may still name one
+    ...((str(v.task) ?? taskOf(str(v.title) ?? '')) ? { task: str(v.task) ?? taskOf(str(v.title) ?? '') } : {}),
     // three plain names joined by "/", never a path that climbs out of the app's folder
     ...(appSession && /^[\w-]+\/[\w-]+\/local_[\w-]+$/.test(appSession) ? { appSession } : {}),
     ...(v.isWrapRecap === true ? { isWrapRecap: true } : {}),
@@ -186,19 +187,42 @@ export function stateWord(c: Conversation, now: number): string {
 }
 
 // Several files can be one conversation to you: the desktop app restarts one under a new id, a
-// task runs in a fork after its first session. They are merged by task id, else by the app's own
-// session: the row is the one that waits, else the newest.
+// task runs in a fork after its first session. Files that share a task id, or the app's own
+// session, are one group (either link joins them, so an older file without the task id still
+// meets its newer one); the row is the one that waits, else the newest.
 const ORDER: Record<ConversationState, number> = { waiting: 0, error: 1, running: 2, done: 3 }
 const byShown = (now: number) => (a: Conversation, b: Conversation) =>
   ORDER[shownState(a, now)] - ORDER[shownState(b, now)] || Date.parse(b.updated) - Date.parse(a.updated)
-export const groupKey = (c: Conversation) => (c.task ? `task:${c.task}` : c.appSession ? `app:${c.appSession}` : `id:${c.id}`)
-export function merged(list: Conversation[], now: number): Conversation[] {
-  const groups = new Map<string, Conversation[]>()
-  for (const c of list) groups.set(groupKey(c), [...(groups.get(groupKey(c)) ?? []), c])
-  return [...groups.values()].map(g => {
-    const top = [...g].sort((a, b) => (shownState(a, now) === 'waiting' ? 0 : 1) - (shownState(b, now) === 'waiting' ? 0 : 1) || Date.parse(b.updated) - Date.parse(a.updated))[0]!
-    return top
+export function groups(list: Conversation[]): Conversation[][] {
+  // union-find over the files, joined by each key they carry
+  const parent = list.map((_, i) => i)
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)))
+  const firstOf = new Map<string, number>()
+  list.forEach((c, i) => {
+    for (const key of [c.task && `task:${c.task}`, c.appSession && `app:${c.appSession}`]) {
+      if (!key) continue
+      const j = firstOf.get(key)
+      if (j === undefined) firstOf.set(key, i)
+      else parent[find(i)] = find(j)
+    }
   })
+  const out = new Map<number, Conversation[]>()
+  list.forEach((c, i) => out.set(find(i), [...(out.get(find(i)) ?? []), c]))
+  return [...out.values()]
+}
+const rowOf = (g: Conversation[], now: number) =>
+  [...g].sort((a, b) => (shownState(a, now) === 'waiting' ? 0 : 1) - (shownState(b, now) === 'waiting' ? 0 : 1) || Date.parse(b.updated) - Date.parse(a.updated))[0]!
+export function merged(list: Conversation[], now: number): Conversation[] {
+  return groups(list).map(g => rowOf(g, now))
+}
+// A row's name for comparing two reads (a toast): the same for every file of its group.
+export function groupKeys(list: Conversation[]): Map<string, string> {
+  const keys = new Map<string, string>()
+  for (const g of groups(list)) {
+    const key = g.map(c => c.id).sort()[0]!
+    for (const c of g) keys.set(c.id, key)
+  }
+  return keys
 }
 
 const keepFor = (c: Conversation, now: number) => (shownState(c, now) === 'waiting' ? KEEP_WAITING_MS : KEEP_MS)
@@ -217,8 +241,10 @@ export function recent(list: Conversation[], now: number): Conversation[] {
 // conversation has nothing to archive), not a side chat. Whether the app already archived each is
 // the caller's to ask (APP_SESSIONS); oldest first.
 export function idle(list: Conversation[], now: number): Conversation[] {
-  return merged(list.filter(c => sourceOf(c) !== 'side'), now)
-    .filter(c => c.appSession && shownState(c, now) === 'done' && now - Date.parse(c.updated) > IDLE_MS)
+  return groups(list.filter(c => sourceOf(c) !== 'side'))
+    .filter(g => g.every(c => shownState(c, now) === 'done' && now - Date.parse(c.updated) > IDLE_MS))
+    .map(g => rowOf(g, now))
+    .filter(c => c.appSession)
     .sort((a, b) => Date.parse(a.updated) - Date.parse(b.updated))
 }
 

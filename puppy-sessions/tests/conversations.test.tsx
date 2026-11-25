@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { cleanPrompt, firstSentence, idle, IDLE_MS, isBrief, isWrapUp, KEEP_MS, KEEP_WAITING_MS, merged, nameOf, parseConversation, plain, plainLine, questionOf, recent, rowName, RUNNING_MS, shownState, sourceOf, stateWord, taskOf, wrapOf } from '../hooks/sessions'
+import { cleanPrompt, firstSentence, groupKeys, idle, IDLE_MS, isBrief, isWrapUp, KEEP_MS, KEEP_WAITING_MS, merged, nameOf, parseConversation, plain, plainLine, questionOf, recent, rowName, RUNNING_MS, shownState, sourceOf, stateWord, taskOf, wrapOf } from '../hooks/sessions'
 import { claudeLimits, codexLimits, limitText, resetText } from '../hooks/usage'
 
 const T = Date.parse('2026-10-27T12:00:00.000Z')
@@ -194,4 +194,22 @@ test('a window resets: a time, a weekday, a date; past it, 已重置 in place of
   expect(resetText(T + 10 * 86_400_000, T)).toMatch(/^\d{1,2}\/\d{1,2} 重置$/)
   expect(limitText({ label: '一週', percent: 97.6, resetsAt: T - 1 }, T)).toBe('一週 已重置')
   expect(limitText({ label: '5 小時', percent: 41.6 }, T)).toBe('5 小時 42%')
+})
+
+test('Codex #1: a task id or the app session joins files, either link; a group with one running file is not idle', () => {
+  const at = (ms: number) => new Date(T - ms).toISOString()
+  const older = parseConversation(conv({ id: 'old', appSession: 'a/o/local_x', state: 'done', updated: at(2 * IDLE_MS) }))
+  const newer = parseConversation(conv({ id: 'new', appSession: 'a/o/local_x', task: 'T172', state: 'running', updated: at(60_000) }))
+  const fork = parseConversation(conv({ id: 'fork', task: 'T172', state: 'done', updated: at(3_600_000) }))
+  expect(merged([older, newer, fork], T).map(c => c.id)).toEqual(['new'])
+  expect(idle([older, newer, fork], T)).toEqual([])
+  const keys = groupKeys([older, newer, fork])
+  expect(new Set([keys.get('old'), keys.get('new'), keys.get('fork')]).size).toBe(1)
+})
+
+test('Codex #5: a file from puppy-console 0.12 takes its task id from its title', () => {
+  const a = parseConversation(conv({ id: 'a', title: 'T172 puppy-sessions', isAppTitle: true }))
+  const b = parseConversation(conv({ id: 'b', title: 'T172 puppy-sessions', isAppTitle: true, updated: new Date(T - 1000).toISOString() }))
+  expect(a.task).toBe('T172')
+  expect(merged([a, b], T).map(c => c.id)).toEqual(['a'])
 })
