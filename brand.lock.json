@@ -1,7 +1,7 @@
 {
   "_about": "Which baibai-brand version this repo's generated files come from. Written by baibai-brand `npm run sync`; do not edit.",
   "source": "nonbiri1004/baibai-brand",
-  "commit": "49d24e3519f0227134fe52cfbc425b9c76c9c028",
+  "commit": "05e7fe1e5517f686905f506cdc73054ae2b35af2",
   "files": {
     "puppy-sessions/hooks/puppy.ts": "sha256:6c875ba3aa38ab2d840a3a771719ca3392ee4dda656669661ddc0fb66d9a2210",
     "puppy-skills/hooks/puppy.ts": "sha256:6c875ba3aa38ab2d840a3a771719ca3392ee4dda656669661ddc0fb66d9a2210",
