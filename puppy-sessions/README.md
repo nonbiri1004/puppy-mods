@@ -39,6 +39,19 @@ a pane beside the chat with your claude conversations, and nothing else. (a sess
 - a file that isn't a conversation's is named at the bottom with the reason, never dropped without a word. the same for a folder the pane can't read, or a conversation that can't write its own file.
 - times are one unit, as a glance needs: `5 分鐘`, `8 小時`, `3 天`.
 
+## how it works
+
+two halves that only meet in a folder of small files ([FORMAT.md](FORMAT.md)).
+
+- **the writing half** runs in every conversation (unless **conversations** is off). `turn.start` writes `running`; a `wrap_up` call is caught as it happens, and so is a question card (`AskUserQuestion`, a plan to approve, an offer of a new session), which writes `waiting` with its question until the call returns; `turn.complete` writes `done`, `waiting` (the wrap_up had a question) or `error`, with the recap; `session.end` turns `running` into `done`, and a `/clear` also drops the question. the app's own title and whether it began as a fork come from the classic hooks `SessionStart` and `UserPromptSubmit`. a waiting conversation also tries a push through `PushNotification`, only if the permission check already says allow. writes go one after another and never hold up the turn.
+- **the reading half** starts from `/sessions`, which reads once, opens the pane, then reads every minute while it is up (the tick stops when the pane is gone).
+- **reads**: `~/.claude/puppy-sessions/*.json` (files older than two weeks are skipped; a file whose time did not change is not read again); whether the desktop app archived each one, from the app's own session file; claude's limits from `$.session.usage()`; codex's from the end of the newest runs under `~/.codex/sessions/`.
+- **sorts**: side chats are dropped; files of one task (same task id or same app session) become one row, the waiting one first, else the newest; kept three days (two weeks if waiting); then waiting, error, running, done. a `running` file older than six hours counts as done, the fallback for a conversation that crashed. `可以清` is done, untouched for a day, from the app, not archived.
+- **draws**: one pane (`ui.render`, id `puppy-sessions`): `等你回話`, `對話`, `額度`, `可以清`, or the puppy when nothing waits. on a new waiting conversation, a toast shows in the conversation you are in (not in the one that waits).
+- **writes back**: each conversation writes only its own file. the mod archives nothing: `整理…` only fills this conversation's prompt box, and you press enter. on the first start after the rename, it copies the last two weeks from the old `~/.claude/console/sessions/` once.
+- **when it fails**: a file that does not parse is named at the bottom with the reason and keeps its last read; a folder that is missing is just "none yet", any other read error is said in red. a conversation that can't write its own file says so in its own pane and tries again next turn. a write still queued when a session ends may be lost, and the six-hour rule covers it.
+- **where**: [register.tsx](hooks/register.tsx) (hooks, reading, writing, the pane), [sessions.ts](hooks/sessions.ts) (file format, merging, states), [usage.ts](hooks/usage.ts) (the limits), [draw.ts](hooks/draw.ts) (the puppy).
+
 ## install
 
 in a claude code session in your terminal:

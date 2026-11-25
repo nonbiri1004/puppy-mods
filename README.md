@@ -19,6 +19,10 @@ each one does one useful thing and stays out of the way. they're free and open; 
 
 they all look the same way: quiet cards, warm greys, lowercase words. the rules are in [STYLE.md](STYLE.md).
 
+## changing a mod
+
+each mod's readme has a `## how it works` section (what starts it, what it reads, where it draws, what it writes, what happens when it fails). a pull request that changes a mod checks that section too, and updates it if a sentence is no longer true.
+
 ## install
 
 in a claude code session in your terminal:
