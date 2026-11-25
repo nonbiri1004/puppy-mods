@@ -1,6 +1,6 @@
 # puppy mods style
 
-How every puppy mod looks, so they feel like one family. `puppy-console` is the reference: when this file and that mod disagree, fix one of them.
+How every puppy mod looks, so they feel like one family. `puppy-sessions` is the reference: when this file and that mod disagree, fix one of them.
 
 ## Panes are cards
 
@@ -39,7 +39,7 @@ How every puppy mod looks, so they feel like one family. `puppy-console` is the 
   - `error`: something broke.
   - `success`: something is working right now.
   - Everything else: `dimColor`, or the normal text color.
-- Step marks in a flow (puppy-console's ✓ ◐ ○) may carry the step's color: done `success`, running `suggestion`, not reached grey. Only the mark, never its words. (The person chose this from the console mockups, 2026-11.)
+- Step marks in a flow (✓ ◐ ○) may carry the step's color: done `success`, running `suggestion`, not reached grey. Only the mark, never its words. (The person chose this from the console mockups, 2026-11.)
 - One color word per line at most. Color the word that matters (the state, the label), not the whole line.
 - No color per project or per group: groups are told apart by cards and names, in greys. Something old or important gets the full text color, bold, and a small mark, not a new color.
 - A grey bar down a list's left edge is a dim `▎` on each row, not a Box with a `backgroundColor`: a theme's grey fill turns white in 16-color themes.
@@ -47,12 +47,12 @@ How every puppy mod looks, so they feel like one family. `puppy-console` is the 
 ## Pictures (SVG)
 
 - Only where the surface has `Svg` (the desktop app). The terminal gets the same facts as text lines: never drop a fact because there is no picture.
-- Decide the facts once, in one place (`puppy-console/hooks/view.ts`), and let each surface only lay them out. Two code paths that each pick their own facts drift apart.
+- Decide the facts once, in one place (puppy-console 0.12's `hooks/view.ts` did this for its pipeline cards), and let each surface only lay them out. Two code paths that each pick their own facts drift apart.
 - A picture of a piece of work goes inside `▸ details`, never in place of the summary. A picture that only repeats the summary's numbers is not drawn.
 - No node graph for a straight line of steps: a row of text says the same in less room.
 - Emoji (⏰, ✓…) keep their own colors; they are not our drawings. The greys-only rule is for icons we draw.
 - Small icons are 14×14 pixel drawings in greys only, like lofipuppy.app's `PixelIcon`; the terminal shows a text mark in their place.
-- Warm greys, light by day and dark by night with `prefers-color-scheme`. Copy the palette from `puppy-console/hooks/draw.ts` (`--card`, `--line`, `--text`, `--muted`, and the soft `--ok` / `--listen` / `--reject`).
+- Warm greys, light by day and dark by night with `prefers-color-scheme`. The palette: `--card` #f8f7f4 / #232321, `--line` #dcdad4 / #353431, `--text` #2a2926 / #e7e5e0, `--muted` #6d6a64 / #9b9891, and the soft `--ok` #7f9a72 / #86a078, `--listen` #c2a768 / #bfa66a, `--reject` #b98276 / #b07e73 (light / dark; it was in puppy-console 0.12's `hooks/draw.ts`).
 - Pixel art keeps `shape-rendering="crispEdges"`.
 - The puppy's drawing comes from baibai-brand (generated, see `brand.lock.json`). Never draw or edit the puppy by hand here.
 - These mods are coding tools: the puppy keeps you company like a mascot beside you. It wears **no headphones** here; its prop is a small laptop. It types at the laptop (`typing0..5`), sits when idle and sleeps when nothing is going on. All frames come from baibai-brand's `puppy-svg.ts` (bare frames only).

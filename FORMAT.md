@@ -11,7 +11,7 @@ a writer (a pipeline, a board, a script) writes one small json file into a share
 ## who reads what
 
 - **[puppy-todo](puppy-todo)** (setting `status_dir`, empty by default): one read-only card per file that has `waiting` items, under your own list. it reads `title`, `updated`, `waiting` (`id`, `text`, `since`, `group`, `url`, `due`) and `waiting_groups`; nothing else. it reads the folder while its pane is open (once on `/todo`, then every minute).
-- **[puppy-console](puppy-console)** (setting `status_dir`): every field below, a card per pipeline. its own conversation files are a different format, in [its FORMAT.md](puppy-console/FORMAT.md).
+- **[puppy-sessions](puppy-sessions)** reads no status files: it shows your claude conversations, from files of a different format, in [its FORMAT.md](puppy-sessions/FORMAT.md). (as puppy-console, up to 0.12, it read every field below, a card per pipeline.)
 
 a mod never runs a writer and never writes into the folder. an item leaves a card only when its writer stops listing it. the most a button does is open a link or a file to look at, or put words in the prompt box (see `url` and `actions`, below).
 
@@ -56,7 +56,7 @@ a mod never runs a writer and never writes into the folder. an item leaves a car
 | `sections` | no | lists to show on the pipeline's own card, `[{ id, label, rows }]`, below. new in version 1: older files and older mods simply leave it out |
 | `last_output` | no | the newest thing it made: `{ label, at, path? }` |
 | `next` | no | the next step, in words |
-| `detail` | no | anything the pipeline wants to show more of. puppy-console draws a few known ones (below); for others it shows nothing extra |
+| `detail` | no | anything the pipeline wants to show more of. no puppy mod draws it now (puppy-console drew a few known ones, below, up to 0.12) |
 
 ## waiting items
 
@@ -97,7 +97,7 @@ when a pipeline has several items of one kind (three finals to review), it can n
 
 ## sections
 
-a pipeline that wants more than one line can name a few lists, and puppy-console draws them on a card of its own, below what waits for you, in place of the pipeline's grey line, whatever its state:
+a pipeline that wants more than one line can name a few lists. no puppy mod draws them now; puppy-console, up to 0.12, drew them on a card of its own, below what waits for you, in place of the pipeline's grey line, whatever its state:
 
 ```json
 "sections": [
@@ -122,10 +122,10 @@ a pipeline that wants more than one line can name a few lists, and puppy-console
 
 ## known details
 
-puppy-console draws these when `pipeline` matches; anything else in `detail` is ignored.
+puppy-console, up to 0.12, drew these when `pipeline` matched; no puppy mod draws them now. they stay here so the writers keep one agreement.
 
 - `music`: `{ comfy: { up, running, pending }, generating, batches: [{ name, strip, est_usable, target_usable, generated, ok, needs_listen, rejected, errors, avg_gen_sec, status_tail }] }`. `strip` has one letter per song: `o` ok, `l` to hear, `r` rejected, `x` left out, `e` failed, `?` being checked. the pipeline's details show the first batch: its name, then made · ok · to hear · rejected (and failed, and the minutes per song).
-- `ai-video`: `{ spend_usd, cap_usd, jobs: [{ job, stage, spend_usd, cap_usd, updated, next }] }`. `stage` is `plan`, `clips`, `voice`, `compose`, `final` or `done` (ai-video-pipeline also writes `deliver`: the final was approved but copying it out failed; puppy-console doesn't draw that stage yet); the pipeline's details count the jobs at every stage, then the spend, and name them by stage.
+- `ai-video`: `{ spend_usd, cap_usd, jobs: [{ job, stage, spend_usd, cap_usd, updated, next }] }`. `stage` is `plan`, `clips`, `voice`, `compose`, `final` or `done` (ai-video-pipeline also writes `deliver`: the final was approved but copying it out failed; puppy-console never drew that stage); the pipeline's details count the jobs at every stage, then the spend, and name them by stage.
 - `collector-*` (info-collector, one file per profile, e.g. `collector-tech-news`; matched by the prefix): `{ counts: { collected, new, scored, sent, unsent, pending }, errors: [text] }`.
   - `collected`, `new`, `scored` and `sent` are this run. `scored` can be more than `new` (older unscored items are scored too), and `sent` can be more than `scored` (earlier runs' picks).
   - `unsent`: high-scored items not in notion yet (sent next run, or refused).
