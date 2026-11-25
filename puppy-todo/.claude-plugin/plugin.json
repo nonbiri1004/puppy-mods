@@ -1,0 +1,19 @@
+{
+  "name": "puppy-todo",
+  "version": "1.3.0",
+  "description": "your own to-do list in a quiet pane: add, tick, delete. nothing else writes to it",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "lofi puppy",
+    "url": "https://github.com/nonbiri1004"
+  },
+  "homepage": "https://github.com/nonbiri1004/puppy-mods/tree/main/puppy-todo",
+  "repository": "https://github.com/nonbiri1004/puppy-mods",
+  "license": "MIT",
+  "keywords": [
+    "todo",
+    "pane",
+    "puppy",
+    "lofi"
+  ]
+}
