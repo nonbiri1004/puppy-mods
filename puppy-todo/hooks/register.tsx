@@ -134,6 +134,8 @@ function add($: EngineInterface, text: string): Promise<Item | null> {
       createdAt: new Date(now).toISOString(),
     }
     await writeItem($, item)
+    // a new key draws a new, empty field: the old one would keep the words just added
+    await update($, view, v => ({ ...EMPTY, ...v, added: (v.added ?? 0) + 1 }))
 
     return item
   })
@@ -297,13 +299,10 @@ export const register: Register = on => {
     const { open, done, deleted } = listOf(v.items, v.at)
     const mood = open.length === 0 ? 'sleeping' : 'sitting'
     const hasSvg = e.surface !== 'terminal' && 'Svg' in ui
-    // the row's buttons show when the pointer is on the row (the desktop); with no pointer they
-    // always show. Their box keeps its width either way, so the words never wrap anew on hover.
-    const hasPointer = e.surface === 'desktop'
+    // the row's buttons always show, dim: hidden until hover they were never found (11/26)
     const shownDeleted = deleted.slice(0, v.deletedShown ?? DELETED_PAGE)
 
     const row = (i: Item) => {
-      const scope = `row-${i.id}`
       if (Input && v.editingId === i.id) {
         return (
           <Box key={`i-${i.id}`} flexDirection="column" gap="xs">
@@ -320,10 +319,9 @@ export const register: Register = on => {
         )
       }
       const isPinned = Boolean(i.pinnedAt)
-      const hidden = hasPointer ? { display: 'none' as const, hover: { scope, display: 'flex' as const } } : {}
 
       return (
-        <Box key={`i-${i.id}`} flexDirection="row" gap={1} hover={{ scope }}>
+        <Box key={`i-${i.id}`} flexDirection="row" gap={1}>
           {/* one width for the tick, so the words line up */}
           <Box width={3} flexShrink={0} justifyContent="center">
             <Button key={`tick-${i.id}`} label="○" plain dimColor onPress={() => press($, i.id, 'done')} />
@@ -333,16 +331,15 @@ export const register: Register = on => {
             <Text weight={isPinned ? 'semibold' : undefined}>{i.text}</Text>
           </Box>
           <Box flexShrink={0} width={Input ? 8 : 5} flexDirection="row" justifyContent="flex-end" gap={1}>
-            {/* a pinned item keeps its ★ in sight; the others show ☆ with the rest */}
-            <Box {...(isPinned ? {} : hidden)}>
+            <Box>
               <Button key={`pin-${i.id}`} label={isPinned ? '★' : '☆'} plain dimColor onPress={() => press($, i.id, isPinned ? 'unpin' : 'pin')} />
             </Box>
             {Input ? (
-              <Box {...hidden}>
+              <Box>
                 <Button key={`edit-${i.id}`} label="✎" plain dimColor onPress={() => startEdit($, i)} />
               </Box>
             ) : null}
-            <Box {...hidden}>
+            <Box>
               <Button key={`del-${i.id}`} label="✕" plain dimColor onPress={() => press($, i.id, 'delete')} />
             </Box>
           </Box>
@@ -375,7 +372,7 @@ export const register: Register = on => {
         <Box key="card-list" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} gap="xs">
           {Input ? (
             <Input
-              key="add"
+              key={`add-${v.added ?? 0}`}
               placeholder="add a to-do…"
               submitLabel="add"
               onSubmit={said => {

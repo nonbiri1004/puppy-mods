@@ -252,3 +252,23 @@ test('Codex review #7: a pinnedAt or deletedAt that is not text never stops the 
   expect(await ui.find({ key: 'tick-a' })).toBeTruthy()
   expect((await ui.find({ key: 'show-deleted' }))?.text).toBe('▸ deleted 2')
 })
+
+test('the add field starts empty again after each add', async ($, on) => {
+  const { w } = world(on)
+  const ui = await open($)
+  await ui.input({ key: 'add-0', text: '嗨嗨' })
+  expect(Object.values(w.files).some(f => JSON.parse(f).text === '嗨嗨')).toBe(true)
+  expect(await ui.find({ type: 'Input', key: 'add-0' })).toBeFalsy()
+  expect((await ui.find({ type: 'Input', key: 'add-1' }))?.props.value).toBeFalsy()
+})
+
+test('☆ ✎ ✕ always show on the desktop, not only on hover', async ($, on) => {
+  const { w } = world(on)
+  w.files = { 'a.json': file('a') }
+  const ui = await open($)
+  for (const key of ['pin-a', 'edit-a', 'del-a']) {
+    const b = await ui.find({ key })
+    expect(b).toBeTruthy()
+    expect(JSON.stringify(b)).not.toContain('"display":"none"')
+  }
+})
