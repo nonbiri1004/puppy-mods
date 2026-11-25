@@ -54,7 +54,7 @@ function world(on: On) {
     // any other file, by its full path: the status folder, the schedule logs, the Codex lock
     other: {} as Record<string, string>,
     otherTimes: {} as Record<string, number>,
-    // paths whose read fails with a permission error
+    // paths whose read (or stat) fails with a permission error
     unreadable: new Set<string>(),
   }
   mock.env(on, { HOME: '/home/me' })
@@ -82,6 +82,7 @@ function world(on: On) {
     return { deny: 'ENOENT: no such file or directory' }
   })
   on('fs.stat', (_, e) => {
+    if (w.unreadable.has(e.path)) return { deny: 'EACCES: permission denied' }
     if (e.path.startsWith(APP) && w.app[e.path.slice(APP.length + 1, -'.json'.length)] != null) return { value: { kind: 'file', size: 1, mtimeMs: T, realPath: e.path } as never }
     if (e.path in w.other) return { value: { kind: 'file', size: w.other[e.path]!.length, mtimeMs: w.otherTimes[e.path] ?? T, realPath: e.path } as never }
     if (Object.keys(w.other).some(p => p.startsWith(`${e.path}/`))) return { value: { kind: 'dir', size: 0, mtimeMs: w.otherTimes[e.path] ?? T, realPath: e.path } as never }
@@ -454,6 +455,24 @@ test('a status file caught halfway through a write keeps its last alarm', { opti
   await clock.advance(60_000)
   await clock.settle()
   expect(await ui.find({ key: 'card-alarms' })).toBeFalsy()
+})
+
+test('Codex re-review #2: a status file that stays broken is judged again from its last good text, and goes quiet', { options: { status_dir: '~/status' } }, async ($, on) => {
+  const { w, clock } = world(on)
+  w.other = { [`${STATUS}/c.json`]: pipeline({ pipeline: 'c', state: 'ok', updated: new Date(T).toISOString(), stale_after_sec: 600 }) }
+  const ui = await open($)
+  expect(await ui.find({ key: 'card-alarms' })).toBeFalsy()
+  w.other[`${STATUS}/c.json`] = '{'
+  await clock.advance(HOUR)
+  await clock.settle()
+  expect(textOf(await ui.find({ key: 'card-alarms' }))).toContain('沒更新')
+})
+
+test('Codex re-review #6: a Codex lock that is there but can\'t be read is said, not taken for no lock', async ($, on) => {
+  const { w } = world(on)
+  w.unreadable.add('/home/me/.codex/collab.lock')
+  const ui = await open($)
+  expect((await textsOf(ui)).some(t => t.startsWith('讀不到 ~/.codex/collab.lock：'))).toBe(true)
 })
 
 test('one log that can\'t be read is named; the other jobs still show; an unreadable "every" is said', { options: { schedule_logs: '~/logs', schedule_every: 'daily 1d, watch 90min' } }, async ($, on) => {

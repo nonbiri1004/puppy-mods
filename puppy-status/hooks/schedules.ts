@@ -59,12 +59,18 @@ export function everyOf(setting: string): { every: Record<string, number>; unrea
   return { every, unread }
 }
 
-// The runs of every log, one per job (a job in two logs keeps its newest start), with its "every".
+// The runs of every log, one per job (a job in two logs keeps its newest start; the same start in
+// both keeps the one that wrote its end), with its "every". A job named in "schedule every" with
+// no line in any log yet still gets a row: it has never run, which is news once it should have.
 export function schedulesOf(runs: Run[], every: Record<string, number>): Schedule[] {
   const byJob = new Map<string, Run>()
+  const at = (r: Run) => r.startedAt ?? r.endedAt ?? 0
   for (const r of runs) {
     const had = byJob.get(r.job)
-    if (!had || (r.startedAt ?? r.endedAt ?? 0) > (had.startedAt ?? had.endedAt ?? 0)) byJob.set(r.job, r)
+    if (!had || at(r) > at(had) || (at(r) === at(had) && had.endedAt == null && r.endedAt != null)) byJob.set(r.job, r)
+  }
+  for (const job of Object.keys(every)) {
+    if (!byJob.has(job)) byJob.set(job, { job, startedAt: null, endedAt: null, isOk: null })
   }
   return [...byJob.values()]
     .map(r => ({ ...r, everyMs: every[r.job] ?? null }))
@@ -75,17 +81,25 @@ export function schedulesOf(runs: Run[], every: Record<string, number>): Schedul
 // old); else late (it should have started again by now), broken (the last run failed, or never
 // ended), ok. Late is counted from the last start or from when this pane first saw the job,
 // whichever is later: a job just set up (its log may hold only a trial run) or a pane just
-// installed has not missed anything it watched, so it is "pending" for its first interval.
+// installed has not missed anything it watched, so it is "pending" for its first interval. That
+// only holds back "late": a last run that failed still says so. A job with no run in its log is
+// pending until the pane has watched it one interval, then late.
 export function scheduleState(s: Schedule, now: number): ScheduleState {
   if (s.isPaused) return 'paused'
   const isOpen = s.startedAt != null && s.endedAt == null
   if (isOpen && now - s.startedAt! <= RUN_MAX_MS) return 'running'
+  const isBroken = isOpen || s.isOk === false
   const last = s.startedAt ?? s.endedAt
-  if (s.everyMs != null && last != null && now - last > s.everyMs + LATE_GRACE_MS) {
-    const watched = s.seenAt != null && s.seenAt > last ? s.seenAt : last
-    return now - watched > s.everyMs + LATE_GRACE_MS ? 'late' : 'pending'
+  if (last == null) {
+    if (s.everyMs == null || s.seenAt == null) return 'pending'
+    return now - s.seenAt > s.everyMs + LATE_GRACE_MS ? 'late' : 'pending'
   }
-  return isOpen || s.isOk === false ? 'failed' : 'ok'
+  if (s.everyMs != null && now - last > s.everyMs + LATE_GRACE_MS) {
+    const watched = s.seenAt != null && s.seenAt > last ? s.seenAt : last
+    if (now - watched > s.everyMs + LATE_GRACE_MS) return 'late'
+    return isBroken ? 'failed' : 'pending'
+  }
+  return isBroken ? 'failed' : 'ok'
 }
 
 // "collector-tech-news, weekly" → the names (jobs or pipelines) paused on purpose

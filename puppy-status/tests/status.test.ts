@@ -92,3 +92,26 @@ test('paused names split on commas, semicolons and spaces', () => {
   expect([...pausedOf('a, b;c  d')]).toEqual(['a', 'b', 'c', 'd'])
   expect(pausedOf('').size).toBe(0)
 })
+
+test('Codex re-review #3: a job not watched a whole interval yet still says its last run failed', () => {
+  const s = { job: 'j', startedAt: T - 3 * DAY, endedAt: T - 3 * DAY + 1000, isOk: false, everyMs: DAY, seenAt: T }
+  expect(scheduleState(s, T)).toBe('failed')
+  expect(scheduleState({ ...s, isOk: true }, T)).toBe('pending')
+})
+
+test('Codex re-review #4: a job in "every" with no line in any log gets a row, pending, then late', () => {
+  const [daily] = schedulesOf([], { daily: DAY })
+  expect(daily).toMatchObject({ job: 'daily', startedAt: null, endedAt: null, everyMs: DAY })
+  expect(scheduleState({ ...daily!, seenAt: T - HOUR }, T)).toBe('pending')
+  expect(scheduleState({ ...daily!, seenAt: T - DAY - LATE_GRACE_MS - 1000 }, T)).toBe('late')
+  expect(scheduleState({ ...daily!, seenAt: null }, T)).toBe('pending')
+  expect(scheduleState({ ...daily!, isPaused: true }, T)).toBe('paused')
+})
+
+test('Codex re-review #5: the same start in two logs keeps the one that wrote its end, either order', () => {
+  const open = { job: 'daily', startedAt: T - HOUR, endedAt: null, isOk: null }
+  const done = { job: 'daily', startedAt: T - HOUR, endedAt: T - HOUR + 1000, isOk: true }
+  for (const runs of [[open, done], [done, open]]) {
+    expect(scheduleState(schedulesOf(runs, { daily: DAY })[0]!, T)).toBe('ok')
+  }
+})

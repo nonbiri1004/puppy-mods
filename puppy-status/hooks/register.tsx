@@ -140,20 +140,26 @@ async function loadCodex($: EngineInterface, home: string): Promise<Usage['codex
 }
 
 // The Codex lock and limit files (FORMAT.md, "codex lock"). Neither there is the usual case: null.
-async function loadHold($: EngineInterface, home: string): Promise<Usage['hold']> {
+// One that is there but can't be read is named in `errors`, not taken for "no lock".
+async function loadHold($: EngineInterface, home: string, errors: string[]): Promise<Usage['hold']> {
+  const missing = (name: string) => (err: unknown) => {
+    const why = errorText(err)
+    if (!isMissing(why)) errors.push(`讀不到 ~/${name}：${why}`)
+    return null
+  }
   const lockDir = `${home}/${CODEX_LOCK}`
   const lock = await $.fs.stat(lockDir)
     .then(async st => lockOf(await $.fs.read(`${lockDir}/owner`).catch(() => ''), st.mtimeMs ?? null))
-    .catch(() => null)
+    .catch(missing(CODEX_LOCK))
   const limit = await $.fs.stat(`${home}/${CODEX_LIMIT}`)
     .then(async st => ({ text: oneLine(await $.fs.read(`${home}/${CODEX_LIMIT}`), 120), since: st.mtimeMs ?? null }))
-    .catch(() => null)
+    .catch(missing(CODEX_LIMIT))
   return lock || limit ? { lock, limit } : null
 }
 
-async function loadUsage($: EngineInterface, home: string): Promise<Usage> {
+async function loadUsage($: EngineInterface, home: string, errors: string[]): Promise<Usage> {
   const claude = await $.session.usage().then(u => claudeLimits(u.rateLimits)).catch(() => [])
-  return { claude, codex: await loadCodex($, home), hold: await loadHold($, home) }
+  return { claude, codex: await loadCodex($, home), hold: await loadHold($, home, errors) }
 }
 
 // The folders typed in the settings. Empty: that card is off.
@@ -195,19 +201,22 @@ async function seenAt($: EngineInterface, job: string, now: number): Promise<num
 }
 
 // The pipelines that need a look, from every *.json in the status folder. A file caught halfway
-// through a write, a sync's half copy or a file that can't be read this minute keeps what the last
-// read said; a file of another format is not a pipeline's and is passed over.
-const alarmCache = new Map<string, PipelineAlarm | null>()
+// through a write, a sync's half copy or a file that can't be read this minute is judged again
+// from its last good text, so one that stays broken still goes quiet once past stale_after_sec; a
+// file of another format is not a pipeline's and is passed over.
+const statusCache = new Map<string, string>()
 async function loadAlarms($: EngineInterface, dir: string, now: number, paused: Set<string>): Promise<PipelineAlarm[]> {
   const out: PipelineAlarm[] = []
   for (const f of await $.fs.list(dir)) {
     if (f.kind !== 'file' || !f.name.endsWith('.json') || f.name.startsWith('.')) continue
     let alarm: PipelineAlarm | null
     try {
-      alarm = alarmOf(f.name, await $.fs.read(`${dir}/${f.name}`), now)
-      alarmCache.set(f.name, alarm)
+      const text = await $.fs.read(`${dir}/${f.name}`)
+      alarm = alarmOf(f.name, text, now)
+      statusCache.set(f.name, text)
     } catch (err) {
-      alarm = err instanceof NotPipeline ? null : (alarmCache.get(f.name) ?? null)
+      const was = err instanceof NotPipeline ? undefined : statusCache.get(f.name)
+      alarm = was == null ? null : alarmOf(f.name, was, now)
     }
     if (alarm && !paused.has(alarm.pipeline)) out.push(alarm)
   }
@@ -391,12 +400,16 @@ function refresh($: EngineInterface, isNotifying: boolean, isReading: boolean, f
       ? await loadConversations($, `${home}/${SESSIONS}`, now)
       : { conversations: [], error: null, problems: [] }
     const archived = home ? await loadArchived($, home, loaded.conversations) : {}
+    const holdErrors: string[] = []
+    const usage = home ? await loadUsage($, home, holdErrors) : { claude: [], codex: null, hold: null }
+    const fromFolders = home ? await loadFolders($, home, folders, now) : { schedules: [], alarms: [], folderErrors: [] }
     const next: Snapshot = {
       conversations: loaded.conversations,
       conversationsError: loaded.error,
       archived,
-      usage: home ? await loadUsage($, home) : { claude: [], codex: null, hold: null },
-      ...(home ? await loadFolders($, home, folders, now) : { schedules: [], alarms: [], folderErrors: [] }),
+      usage,
+      ...fromFolders,
+      folderErrors: [...fromFolders.folderErrors, ...holdErrors],
       problems: loaded.problems,
       loadedAt: now,
     }
