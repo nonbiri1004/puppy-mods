@@ -147,7 +147,7 @@ test('loading is plain text on every surface', async ($, on) => {
 })
 
 const MODS: View['mods'] = [
-  { id: 'mod:puppy-console:console', name: 'console', description: 'Open the console: your conversations, then the pipelines', plugin: 'puppy-console' },
+  { id: 'mod:puppy-sessions:sessions', name: 'sessions', description: 'Open your conversations', plugin: 'puppy-sessions' },
   { id: 'mod:puppy-todo:todo', name: 'todo', description: 'your own to-do list. nothing else writes to it', plugin: 'puppy-todo' },
 ]
 
@@ -159,12 +159,12 @@ test('mods: one card after the skills, a row per command, counted in the first r
     expect(await ui.find({ type: 'Box', key: 'card-mods' })).toBeTruthy()
     expect((await ui.find({ type: 'Text', text: /where the mod is on · 2/ }))?.text).toBeTruthy()
     const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
-    expect(texts.some(t => t.startsWith('/console Open the console'))).toBe(true)
+    expect(texts.some(t => t.startsWith('/sessions Open your conversations'))).toBe(true)
     // unfolded: the whole description and where it comes from
     expect(texts).toContain('from puppy-todo')
-    expect(texts).not.toContain('from puppy-console')
+    expect(texts).not.toContain('from puppy-sessions')
     // after the skills' cards
-    expect(texts.findIndex(t => t.startsWith('/console'))).toBeGreaterThan(texts.findIndex(t => t.startsWith('dig-hole')))
+    expect(texts.findIndex(t => t.startsWith('/sessions'))).toBeGreaterThan(texts.findIndex(t => t.startsWith('dig-hole')))
     await ui.unmount()
   }
 })

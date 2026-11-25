@@ -56,7 +56,7 @@ test('mods: a plugin\'s bare command that is not a skill, without its marketplac
     [
       c('todo', 'plugin', 'puppy-todo@puppy-mods'),
       c('compact', 'builtin'),
-      c('console', 'plugin', 'puppy-console'),
+      c('sessions', 'plugin', 'puppy-sessions'),
       // a plugin's skill or markdown command reads <plugin>:<name>
       c('toys:ball', 'plugin', 'toys'),
       // a skill found on disk is already a row above
@@ -68,6 +68,6 @@ test('mods: a plugin\'s bare command that is not a skill, without its marketplac
     new Set(['dig-hole']),
     ['my-skills'],
   )
-  expect(mods.map(m => `${m.name}|${m.plugin}`)).toEqual(['console|puppy-console', 'ghost|', 'todo|puppy-todo'])
-  expect(mods[0]?.id).toBe('mod:puppy-console:console')
+  expect(mods.map(m => `${m.name}|${m.plugin}`)).toEqual(['ghost|', 'sessions|puppy-sessions', 'todo|puppy-todo'])
+  expect(mods[1]?.id).toBe('mod:puppy-sessions:sessions')
 })
