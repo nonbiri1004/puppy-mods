@@ -52,6 +52,8 @@ export type View = {
   editNote?: string | null
   // the last item deleted here, for undo
   lastDeleted?: { id: string; text: string; deletedAt: string } | null
+  // how many were added here: the add field's key, so it starts empty again
+  added?: number
   // the deleted list is unfolded, and how many of it show
   isShowingDeleted?: boolean
   deletedShown?: number

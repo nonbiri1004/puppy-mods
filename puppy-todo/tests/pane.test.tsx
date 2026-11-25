@@ -81,7 +81,7 @@ test('the pane: one list with a tick and ✕ on each row, the add field, done fo
   }
   // the phone draws no field yet; the others do
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await desk.find({ type: 'Input', key: 'add' })).toBeTruthy()
+  expect(await desk.find({ type: 'Input', key: 'add-0' })).toBeTruthy()
   await desk.unmount()
 })
 
