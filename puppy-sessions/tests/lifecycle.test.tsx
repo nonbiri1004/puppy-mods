@@ -26,6 +26,8 @@ function conversation(on: On, env: Record<string, string> = {}) {
     store: new Map<string, unknown>(),
     // a file's time by path (default: now)
     mtimes: {} as Record<string, number>,
+    // a read of this path waits until `until`
+    readHold: null as { path: string; until: Promise<void> } | null,
     hold: null as ((tool: string) => Promise<void> | null) | null,
   }
   mock.env(on, { HOME: '/home/me', ...env })
@@ -36,11 +38,13 @@ function conversation(on: On, env: Record<string, string> = {}) {
     if (!names.length) return { deny: 'ENOENT: no such file or directory' }
     return { value: names.map(name => ({ name, kind: 'file' as const, size: 1, mtimeMs: w.mtimes[`${dir}${name}`] ?? T, isLink: false })) }
   })
-  on('fs.read', (_, e) => {
+  on('fs.read', async (_, e) => {
+    if (w.readHold?.path === e.path) await w.readHold.until
     const text = w.written[e.path]
     if (text == null) throw new Error('missing')
     return { value: text }
   })
+  on('fs.exists', (_, e) => ({ value: e.path in w.written }))
   on('fs.write', async (_, e) => {
     if (w.gate) await w.gate
     if (w.isWriteBroken) throw new Error('EACCES: permission denied')
@@ -360,4 +364,23 @@ test('no old folder: nothing to copy, and it counts as done', async ($, on) => {
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await clock.settle()
   expect(stored.get('migrated:console')).toBe(true)
+})
+
+test('Codex #2: a conversation\'s first write waits for the copy, and the copy never writes over it', async ($, on) => {
+  const { w, clock, file } = conversation(on)
+  w.id = 'a'
+  const old = '/home/me/.claude/console/sessions'
+  w.written[`${old}/a.json`] = JSON.stringify({ format: 'session-status', version: 1, id: 'a', updated: new Date(T - 60_000).toISOString(), state: 'waiting', title: 'old', recap: 'Old recap.', ask: 'Old?' })
+  // the old file's read is held: the turn's own write is queued meanwhile
+  let release = () => {}
+  const held = new Promise<void>(resolve => { release = resolve })
+  w.readHold = { path: `${old}/a.json`, until: held }
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.turn.start({ text: 'new topic', turnId: 't1' })
+  // everything else settles first: the turn's write has had its chance before the copy goes on
+  await clock.settle()
+  release()
+  await clock.settle()
+  // the copied file came first, then this turn wrote over it: running, its own prompt
+  expect(file()).toMatchObject({ state: 'running', ask: null })
 })

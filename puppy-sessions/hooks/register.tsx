@@ -5,7 +5,7 @@ import type { Conversation, Problem, Snapshot, Usage } from '../types'
 import { cut, MASCOT_SCALE, mascot, PUPPY_COLUMNS, PUPPY_MIN_ROWS, stillBlocks } from './draw'
 import type { Mood } from './draw'
 import {
-  ago, APP_SESSIONS, cleanPrompt, firstSentence, folderName, groupKey, idle, isBrief, isSideChatTitle, isWrapUp, KEEP_WAITING_MS, nameOf, OLD_SESSIONS, oneLine,
+  ago, APP_SESSIONS, cleanPrompt, firstSentence, folderName, groupKeys, idle, isBrief, isSideChatTitle, isWrapUp, KEEP_WAITING_MS, nameOf, OLD_SESSIONS, oneLine,
   parseConversation, plain, plainLine, promptName, questionOf, recent, rowName, SESSIONS, shownState, sourceOf, stateWord, taskOf, waited, wrapOf,
 } from './sessions'
 import { claudeLimits, CODEX_SESSIONS, CODEX_TAIL_BYTES, codexLimits, limitText, readText } from './usage'
@@ -70,15 +70,15 @@ async function loadConversations($: EngineInterface, dir: string, now: number): 
   return { conversations: out, error: null, problems }
 }
 
-// Whether the desktop app archived each finished conversation, from its own session file's
+// Whether the desktop app archived each conversation, from its own session file's
 // isArchived. That file is the app's, not documented: one missing, unreadable or without a
 // true/false there is left out, so the pane says it does not know rather than guess. Read again
 // only when the file's time changes.
 const appCache = new Map<string, { mtimeMs: number; isArchived: boolean | null }>()
-async function loadArchived($: EngineInterface, home: string, list: Conversation[], now: number): Promise<Record<string, boolean>> {
+async function loadArchived($: EngineInterface, home: string, list: Conversation[]): Promise<Record<string, boolean>> {
   const out: Record<string, boolean> = {}
   for (const c of list) {
-    if (!c.appSession || shownState(c, now) !== 'done' || c.appSession in out) continue
+    if (!c.appSession || c.appSession in out) continue
     const path = `${home}/${APP_SESSIONS}/${c.appSession}.json`
     try {
       const { mtimeMs } = await $.fs.stat(path)
@@ -97,26 +97,40 @@ async function loadArchived($: EngineInterface, home: string, list: Conversation
   return out
 }
 
-// The newest name in a folder of dated names (2026, 11, 23): the newest run is there.
-async function newestDir($: EngineInterface, dir: string): Promise<string | null> {
-  const names = (await $.fs.list(dir)).filter(f => f.kind === 'dir' && /^\d+$/.test(f.name)).map(f => f.name).sort()
-  return names.length ? `${dir}/${names[names.length - 1]}` : null
+// The day folders under sessions/<year>/<month>/<day>/, newest first, at most `n`.
+async function newestDays($: EngineInterface, root: string, n: number): Promise<string[]> {
+  const dated = async (dir: string) =>
+    (await $.fs.list(dir).catch(() => [])).filter(f => f.kind === 'dir' && /^\d+$/.test(f.name)).map(f => f.name).sort().reverse()
+  const out: string[] = []
+  for (const y of await dated(root)) {
+    for (const m of await dated(`${root}/${y}`)) {
+      for (const d of await dated(`${root}/${y}/${m}`)) {
+        out.push(`${root}/${y}/${m}/${d}`)
+        if (out.length >= n) return out
+      }
+    }
+  }
+  return out
 }
 
-// Codex's newest reading: the newest day's runs, newest first, the first whose end holds one.
-// No ~/.codex (Codex not used here) is no line at all, not an error.
+// Codex's newest reading: the runs of the two newest days (a run started yesterday may still be
+// writing), the three last written, and of their readings the newest. No ~/.codex (Codex not used
+// here) is no line at all, not an error.
 async function loadCodex($: EngineInterface, home: string): Promise<Usage['codex']> {
   try {
-    let dir: string | null = `${home}/${CODEX_SESSIONS}`
-    for (let depth = 0; depth < 3 && dir; depth++) dir = await newestDir($, dir)
-    if (!dir) return null
-    const runs = (await $.fs.list(dir)).filter(f => f.kind === 'file' && f.name.endsWith('.jsonl')).sort((a, b) => (b.mtimeMs ?? 0) - (a.mtimeMs ?? 0))
-    for (const f of runs.slice(0, 3)) {
-      const offset = Math.max(0, f.size - CODEX_TAIL_BYTES)
-      const found = codexLimits(await $.fs.read(`${dir}/${f.name}`, { offset, length: f.size - offset }))
-      if (found) return found
+    const runs: { path: string; size: number; mtimeMs: number }[] = []
+    for (const day of await newestDays($, `${home}/${CODEX_SESSIONS}`, 2)) {
+      for (const f of await $.fs.list(day)) {
+        if (f.kind === 'file' && f.name.endsWith('.jsonl')) runs.push({ path: `${day}/${f.name}`, size: f.size, mtimeMs: f.mtimeMs ?? 0 })
+      }
     }
-    return null
+    let best: Usage['codex'] = null
+    for (const f of runs.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 3)) {
+      const offset = Math.max(0, f.size - CODEX_TAIL_BYTES)
+      const found = codexLimits(await $.fs.read(f.path, { offset, length: f.size - offset }))
+      if (found && (!best || (found.readAt ?? 0) > (best.readAt ?? 0))) best = found
+    }
+    return best
   } catch {
     return null
   }
@@ -132,6 +146,12 @@ async function loadUsage($: EngineInterface, home: string): Promise<Usage> {
 // yet (a conversation may already have written its own), and left where they were: the old folder
 // can go by hand. A failure is said in the pane and tried again at the next start.
 async function migrate($: EngineInterface): Promise<void> {
+  // in the write queue, so this conversation's own first write never runs while files are copied
+  const copying = writing.then(() => copyOld($))
+  writing = copying
+  return copying
+}
+async function copyOld($: EngineInterface): Promise<void> {
   try {
     if ((await $.store.get(MIGRATED)) === true) return
     const home = await $.env.get('HOME')
@@ -150,7 +170,10 @@ async function migrate($: EngineInterface): Promise<void> {
     for (const f of old) {
       if (f.kind !== 'file' || !f.name.endsWith('.json') || f.name.startsWith('.') || have.has(f.name)) continue
       if (f.mtimeMs && now - f.mtimeMs > KEEP_WAITING_MS) continue
-      await $.fs.write(`${to}/${f.name}`, await $.fs.read(`${from}/${f.name}`))
+      const text = await $.fs.read(`${from}/${f.name}`)
+      // another conversation may have written its own file meanwhile: that one is newer
+      if (await $.fs.exists(`${to}/${f.name}`)) continue
+      await $.fs.write(`${to}/${f.name}`, text)
     }
     await $.store.set(MIGRATED, true)
     await update($, migrateError, () => null)
@@ -253,8 +276,15 @@ async function push($: EngineInterface, c: Conversation | null): Promise<void> {
 
 // The rows that wait for you, by group (one task's files are one row): what a toast compares
 // between two reads.
-const waitingIds = (s: Snapshot | null, now: number) =>
-  new Set(s ? recent(s.conversations, now).filter(c => shownState(c, now) === 'waiting').map(groupKey) : [])
+const waitingIds = (s: Snapshot | null, now: number) => {
+  if (!s) return new Set<string>()
+  const keys = groupKeys(s.conversations)
+  return new Set(recent(live(s), now).filter(c => shownState(c, now) === 'waiting').map(c => keys.get(c.id) ?? c.id))
+}
+// The files of conversations the desktop app has not archived: an archived one is done with,
+// whatever its last state. Taken out before files are merged, so an archived file never hides
+// one of its group that is still open.
+const live = (s: Snapshot) => s.conversations.filter(c => !(c.appSession && s.archived[c.appSession] === true))
 
 // One refresh at a time: the timer and the button share the running one,
 // so an older read can never finish last and overwrite a newer one.
@@ -266,7 +296,7 @@ function refresh($: EngineInterface, isNotifying: boolean, isReading: boolean): 
     const loaded = isReading && home
       ? await loadConversations($, `${home}/${SESSIONS}`, now)
       : { conversations: [], error: null, problems: [] }
-    const archived = home ? await loadArchived($, home, loaded.conversations, now) : {}
+    const archived = home ? await loadArchived($, home, loaded.conversations) : {}
     const next: Snapshot = {
       conversations: loaded.conversations,
       conversationsError: loaded.error,
@@ -280,9 +310,10 @@ function refresh($: EngineInterface, isNotifying: boolean, isReading: boolean): 
     // own. This one's question is in front of you already.
     if (isNotifying && prev) {
       const was = waitingIds(prev, now)
+      const keys = groupKeys(next.conversations)
       const self = await $.session.id().catch(() => '')
-      for (const c of recent(next.conversations, now)) {
-        if (shownState(c, now) === 'waiting' && !was.has(groupKey(c)) && c.id !== self) $.ui.toast(cut(`${rowName(c)} 在等你：${c.ask ?? ''}`, 120), { timeoutMs: 10_000 })
+      for (const c of recent(live(next), now)) {
+        if (shownState(c, now) === 'waiting' && !was.has(keys.get(c.id) ?? c.id) && c.id !== self) $.ui.toast(cut(`${rowName(c)} 在等你：${c.ask ?? ''}`, 120), { timeoutMs: 10_000 })
       }
     }
   })()
@@ -496,11 +527,11 @@ export const register: Register = (on, options) => {
     const since = (c: Conversation) => waited(now - Date.parse(c.updated))
     const fit = (text: string, room: number) => (isTerminal ? cut(text, Math.max(8, room)) : text)
 
-    const listed = recent(snap.conversations, now)
-    const waiting = listed.filter(c => shownState(c, now) === 'waiting')
     // archived in the app: done with, so not listed
-    const others = listed.filter(c => shownState(c, now) !== 'waiting' && !(c.appSession && snap.archived[c.appSession] === true))
-    const idleOnes = idle(snap.conversations, now)
+    const listed = recent(live(snap), now)
+    const waiting = listed.filter(c => shownState(c, now) === 'waiting')
+    const others = listed.filter(c => shownState(c, now) !== 'waiting')
+    const idleOnes = idle(live(snap), now)
     const cleanable = idleOnes.filter(c => snap.archived[c.appSession!] === false)
     const unknown = idleOnes.filter(c => !(c.appSession! in snap.archived)).length
 

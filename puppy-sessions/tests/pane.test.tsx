@@ -323,3 +323,40 @@ test('conversations off: nothing is listed, and the pane says why', { options: {
   expect((await textsOf(ui)).some(t => t.startsWith('conversations 關著'))).toBe(true)
   await ui.unmount()
 })
+
+test('Codex #3 and #4: an archived file is taken out before merging, whatever its state', async ($, on) => {
+  const { w } = world(on)
+  const app = (id: string) => `acct/org/local_${id}`
+  w.files = {
+    'ask.json': conv({ id: 'ask', state: 'waiting', title: 'archived question', ask: 'still?', appSession: app('ask') }),
+    'err.json': conv({ id: 'err', state: 'error', title: 'archived error', appSession: app('err') }),
+    // one task in two app sessions: the newer is archived, the older is not and stays
+    'new.json': conv({ id: 'new', task: 'T9', title: 'T9 newer', appSession: app('new'), updated: at(2 * DAY) }),
+    'old.json': conv({ id: 'old', task: 'T9', title: 'T9 older', appSession: app('old'), updated: at(3 * DAY - HOUR) }),
+  }
+  w.app = {
+    [app('ask')]: JSON.stringify({ isArchived: true }),
+    [app('err')]: JSON.stringify({ isArchived: true }),
+    [app('new')]: JSON.stringify({ isArchived: true }),
+    [app('old')]: JSON.stringify({ isArchived: false }),
+  }
+  const ui = await open($)
+  const texts = (await textsOf(ui)).join('\n')
+  expect(texts).not.toContain('archived question')
+  expect(texts).not.toContain('archived error')
+  expect(await ui.find({ key: 'card-waiting' })).toBeFalsy()
+  expect(textOf(await ui.find({ key: 'card-conversations' }))).toContain('T9 older')
+  expect(textOf(await ui.find({ key: 'card-clean' }))).toContain('T9 older')
+  await ui.unmount()
+})
+
+test('Codex #6: a run from yesterday written after today\'s gives the reading', async ($, on) => {
+  const { w } = world(on)
+  w.codex = {
+    [`${CODEX}/2026/11/24/resumed.jsonl`]: `${codexLine(90, T - HOUR)}\n`,
+    [`${CODEX}/2026/11/25/today.jsonl`]: `${codexLine(10, T - 2 * HOUR)}\n`,
+  }
+  const ui = await open($)
+  expect(textOf(await ui.find({ key: 'card-usage' }))).toMatch(/5 小時 90%/)
+  await ui.unmount()
+})
