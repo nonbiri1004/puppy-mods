@@ -12,8 +12,8 @@ each one does one useful thing and stays out of the way. they're free and open; 
 
 | mod | what it does |
 | --- | --- |
-| [puppy-todo](puppy-todo) | your own to-do list in a pane beside the chat: add, tick, delete. nothing else writes to it |
-| [puppy-console](puppy-console) | a pane with everything that waits for you first (conversations that ask you something, pipeline items to review), then one short card per production pipeline (music, videos, …). each pipeline writes a small status file ([format](puppy-console/FORMAT.md)) |
+| [puppy-todo](puppy-todo) | the things that wait for you outside the chat: your own to-do list (add, tick, delete; nothing else writes to it), and, if you set a status folder, a read-only card of what a board lists for you |
+| [puppy-console](puppy-console) | a pane with everything that waits for you first (conversations that ask you something, pipeline items to review), then one short card per production pipeline (music, videos, …). each pipeline writes a small status file ([format](FORMAT.md)) |
 | [puppy-skills](puppy-skills) | `/my-kit`: a pane with the skills you have, grouped by where they work (everywhere, one repo, a plugin), with a ⏰ on the ones a scheduled task uses, then the slash commands your mods add (`/console`, `/todo`) |
 | [puppy-theme](puppy-theme) | the puppy's look for the desktop app: warm grey colors, a small framed sky that follows the time of day, pixel message cards and four sets of soft sounds. `/look` picks each part |
 
