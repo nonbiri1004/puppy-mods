@@ -1,5 +1,6 @@
+import type { On } from 'claude-code'
+import type { TestBody } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
-import type { On } from 'claude-code/testing'
 
 import { REFRESH_MS } from '../hooks/register'
 
@@ -53,7 +54,7 @@ function world(on: On) {
   return { w, clock }
 }
 
-const open = async ($: Parameters<Parameters<typeof test>[1]>[0], surface: 'desktop' | 'terminal' | 'mobile' = 'desktop') => {
+const open = async ($: Parameters<TestBody>[0], surface: 'desktop' | 'terminal' | 'mobile' = 'desktop') => {
   await $.session.start({ cwd: '/', surface, isInteractive: true })
   await $.command.run({ command: 'todo', args: '' } as never)
   return $.ui.mount({ ...PANE, surface })
@@ -181,4 +182,73 @@ test('while the pane is up the list is read every few seconds; closed, the reads
   await clock.advance(REFRESH_MS * 3)
   await clock.settle()
   expect((await texts(ui)).some(t => t === 'after close')).toBe(false)
+})
+
+test('Codex review #1: two saves queued on the same field can\'t slip past another window\'s change', async ($, on) => {
+  const { w } = world(on)
+  w.files = { 'a.json': file('a', { text: 'old' }) }
+  const ui = await open($)
+  await ui.press({ key: 'edit-a' })
+  w.files['a.json'] = file('a', { text: 'from b' })
+  await Promise.all([ui.input({ key: 'edit-a', text: 'mine' }), ui.input({ key: 'edit-a', text: 'mine' })])
+  expect(parsed(w, 'a.json').text).toBe('from b')
+})
+
+test('Codex review #2: a press never writes through a file whose id changed to another item\'s', async ($, on) => {
+  const { w } = world(on)
+  w.files = { 'a.json': file('a'), 'b.json': file('b', { text: 'keep b' }) }
+  const ui = await open($)
+  w.files['a.json'] = file('b', { text: 'not b' })
+  await ui.press({ key: 'pin-a' })
+  expect(parsed(w, 'b.json').text).toBe('keep b')
+  expect((await texts(ui)).some(t => t.startsWith('could not save') && t.includes('the id inside a.json'))).toBe(true)
+})
+
+test('Codex review #3: an old undo does not take back a later delete from another window', async ($, on) => {
+  const { w } = world(on)
+  w.files = { 'a.json': file('a') }
+  const ui = await open($)
+  await ui.press({ key: 'del-a' })
+  // another window restored it and deleted it again
+  w.files['a.json'] = file('a', { deletedAt: '2026-10-27T11:00:00Z', deletedBy: 'person' })
+  await ui.press({ key: 'undo-delete' })
+  expect(parsed(w, 'a.json').deletedAt).toBe('2026-10-27T11:00:00Z')
+  expect((await texts(ui)).some(t => t.includes('changed in another window since'))).toBe(true)
+})
+
+test('Codex review #4: a file caught halfway through a write keeps its last read and is counted', async ($, on) => {
+  const { w } = world(on)
+  w.files = { 'a.json': file('a', { text: 'call the vet' }) }
+  const ui = await open($)
+  w.files['a.json'] = '{"id":"a","text":'
+  await ui.press({ key: 'refresh' })
+  const now = await texts(ui)
+  expect(now.some(t => t === 'call the vet')).toBe(true)
+  expect(now.some(t => t.startsWith('could not read 1 file this time'))).toBe(true)
+})
+
+test('Codex review #5: reads slower than the timer still land: a tick skips while one is going', async ($, on) => {
+  const { w, clock } = world(on)
+  w.files = { 'a.json': file('a', { text: 'old words' }) }
+  const ui = await open($)
+  w.files['a.json'] = file('a', { text: 'new words' })
+  w.hold = { path: 'a.json', release: () => undefined }
+  await clock.advance(REFRESH_MS)
+  await clock.settle()
+  const first = w.hold
+  w.hold = null
+  // the next tick comes while the first read is still going: it does nothing
+  await clock.advance(REFRESH_MS)
+  await clock.settle()
+  first.release()
+  await clock.settle()
+  expect((await texts(ui)).some(t => t === 'new words')).toBe(true)
+})
+
+test('Codex review #7: a pinnedAt or deletedAt that is not text never stops the pane drawing', async ($, on) => {
+  const { w } = world(on)
+  w.files = { 'a.json': file('a', { pinnedAt: 123 }), 'b.json': file('b', { pinnedAt: 456 }), 'c.json': file('c', { deletedAt: 789 }), 'd.json': file('d', { deletedAt: 1 }) }
+  const ui = await open($)
+  expect(await ui.find({ key: 'tick-a' })).toBeTruthy()
+  expect((await ui.find({ key: 'show-deleted' }))?.text).toBe('▸ deleted 2')
 })

@@ -46,7 +46,14 @@ async function readItems($: EngineInterface, was: readonly Item[]): Promise<{ it
         return was.find(i => i.id === id) ?? null
       }
       const item = parseItem(text)
-      if (item && item.id !== id) {
+      if (!item) {
+        // caught halfway through a write: the last read stands, and it is counted
+        const had = was.find(i => i.id === id)
+        if (had) unread++
+
+        return had ?? null
+      }
+      if (item.id !== id) {
         misnamed.push(f.name)
 
         return null
@@ -133,19 +140,26 @@ function add($: EngineInterface, text: string): Promise<Item | null> {
 }
 
 // One file, read again just before it is changed, so a change from another window isn't undone.
-async function fresh($: EngineInterface, id: string): Promise<Item | null> {
-  return parseItem(await $.fs.read(`${await itemsDir($)}/${id}.json`))
+// A file whose id is no longer its own name is never written through: that would land on another item.
+async function fresh($: EngineInterface, id: string): Promise<Item> {
+  const item = parseItem(await $.fs.read(`${await itemsDir($)}/${id}.json`))
+  if (!item) throw new Error(`${id}.json is not a to-do right now; try again in a moment`)
+  if (item.id !== id) throw new Error(`the id inside ${id}.json is not ${id}`)
+
+  return item
 }
 
 type Press = 'done' | 'open' | 'delete' | 'restore' | 'pin' | 'unpin'
 
-function press($: EngineInterface, id: string, what: Press): Promise<unknown> {
+function press($: EngineInterface, id: string, what: Press, undoOf?: string): Promise<unknown> {
   return save($, async () => {
     const item = await fresh($, id)
-    if (!item) {
-      return
-    }
     const at = new Date(await $.clock.now()).toISOString()
+    // undo brings back only the delete it was made for: one done again since (another window) stays
+    if (what === 'restore' && undoOf && item.deletedAt !== undoOf) {
+      await update($, view, v => ({ ...EMPTY, ...v, lastDeleted: null }))
+      throw new Error('it was changed in another window since; find it under ▸ deleted')
+    }
     const next = {
       done: () => tick(item, at),
       open: () => reopen(item, at),
@@ -158,7 +172,7 @@ function press($: EngineInterface, id: string, what: Press): Promise<unknown> {
     await update($, view, v => ({
       ...EMPTY,
       ...v,
-      lastDeleted: what === 'delete' ? { id, text: item.text } : what === 'restore' || v.lastDeleted?.id === id ? null : v.lastDeleted,
+      lastDeleted: what === 'delete' ? { id, text: item.text, deletedAt: next.deletedAt! } : what === 'restore' || v.lastDeleted?.id === id ? null : v.lastDeleted,
     }))
   })
 }
@@ -173,18 +187,17 @@ async function stopEdit($: EngineInterface): Promise<void> {
   await update($, view, v => ({ ...EMPTY, ...v, editingId: null, editBase: '', editNote: null }))
 }
 
-function saveEdit($: EngineInterface, id: string, text: string): Promise<unknown> {
+async function saveEdit($: EngineInterface, id: string, text: string): Promise<unknown> {
   if (text.trim() === '') {
     return update($, view, v => ({ ...EMPTY, ...v, editNote: 'empty: use ✕ to delete it' }))
   }
+  // the words the field was opened on, taken now: a second press queued behind the first is held
+  // to the same words, so it can't slip past a change the first one found
+  const base = (await read($, view))?.editBase
 
   return save($, async () => {
     const item = await fresh($, id)
-    if (!item) {
-      return stopEdit($)
-    }
-    const base = (await read($, view))?.editBase ?? item.text
-    if (item.text !== base) {
+    if (base === undefined || item.text !== base) {
       await update($, view, v => ({ ...EMPTY, ...v, editBase: item.text, editNote: 'changed in another window: here are the new words' }))
 
       return
@@ -207,16 +220,29 @@ function stopReading(): void {
   reading?.cancel()
   reading = null
 }
+// a tick that finds a read still going skips its turn, so slow reads can't keep making each other stale
+let polling = false
 function startReading($: EngineInterface): void {
   stopReading()
-  reading = $.clock.every(REFRESH_MS, () => {
+  const mine: Timer = $.clock.every(REFRESH_MS, () => {
+    if (polling) return
+    polling = true
     void (async () => {
       if (!(await isPaneUp($))) {
-        return stopReading()
+        // only this timer: a newer one (the pane opened again meanwhile) keeps going
+        mine.cancel()
+        if (reading === mine) reading = null
+
+        return
       }
       await load($)
-    })().catch(() => undefined)
+    })()
+      .catch(() => undefined)
+      .finally(() => {
+        polling = false
+      })
   })
+  reading = mine
 }
 
 export const register: Register = on => {
@@ -369,7 +395,7 @@ export const register: Register = on => {
               <Text dimColor wrap="truncate-end">{`deleted “${v.lastDeleted.text}”`}</Text>
             </Box>
             <Box flexShrink={0}>
-              <Button key="undo-delete" label="undo" dimColor onPress={() => press($, v.lastDeleted!.id, 'restore')} />
+              <Button key="undo-delete" label="undo" dimColor onPress={() => press($, v.lastDeleted!.id, 'restore', v.lastDeleted!.deletedAt)} />
             </Box>
           </Box>
         ) : null}

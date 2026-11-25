@@ -43,6 +43,14 @@ export function parseItem(text: string): Item | null {
   }
   const isObject = (v: unknown) => typeof v === 'object' && v !== null && !Array.isArray(v)
   const { declaration, ...known } = o
+  // times this mod sorts by must be text; a hand-written number would stop the pane drawing
+  for (const k of ['pinnedAt', 'doneAt', 'editedAt', 'reopenedAt'] as const) {
+    if (k in known && typeof known[k] !== 'string') delete known[k]
+  }
+  if ('deletedAt' in known && typeof known.deletedAt !== 'string') {
+    if (known.deletedAt) known.deletedAt = String(known.deletedAt)
+    else delete known.deletedAt
+  }
 
   return {
     ...(known as Partial<Item>),
