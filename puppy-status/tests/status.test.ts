@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { alarmOf, expandHome } from '../hooks/pipelines'
-import { everyOf, LATE_GRACE_MS, RUN_MAX_MS, runsOf, scheduleState, schedulesOf } from '../hooks/schedules'
+import { everyOf, LATE_GRACE_MS, pausedOf, RUN_MAX_MS, runsOf, scheduleState, schedulesOf } from '../hooks/schedules'
 import { lockOf } from '../hooks/usage'
 
 const T = new Date(2026, 10, 25, 12, 0, 0).getTime()
@@ -45,6 +45,11 @@ test('a job is late past its every and the grace, broken when it failed or never
   // a run still going is running, even past its every
   expect(scheduleState(s({ startedAt: T - 4 * HOUR, endedAt: null, isOk: null, everyMs: HOUR }), T)).toBe('running')
   expect(scheduleState(s({ startedAt: T - RUN_MAX_MS - 1000, endedAt: null, isOk: null, everyMs: null }), T)).toBe('failed')
+  // late by its last start, but the pane first saw it less than an interval ago: pending
+  expect(scheduleState(s({ startedAt: T - 3 * DAY, endedAt: T - 3 * DAY, seenAt: T - HOUR }), T)).toBe('pending')
+  expect(scheduleState(s({ startedAt: T - 3 * DAY, endedAt: T - 3 * DAY, seenAt: T - DAY - LATE_GRACE_MS - 1000 }), T)).toBe('late')
+  // paused wins over everything
+  expect(scheduleState(s({ isPaused: true, isOk: false, startedAt: T - 9 * DAY }), T)).toBe('paused')
   // no every: never late
   expect(scheduleState(s({ startedAt: T - 30 * DAY, endedAt: T - 30 * DAY, everyMs: null }), T)).toBe('ok')
 })
@@ -81,4 +86,9 @@ test('the lock\'s owner file gives who and since when; without a time, the folde
 test('~ is the home folder', () => {
   expect(expandHome('~/logs', '/home/me')).toBe('/home/me/logs')
   expect(expandHome('/abs', '/home/me')).toBe('/abs')
+})
+
+test('paused names split on commas, semicolons and spaces', () => {
+  expect([...pausedOf('a, b;c  d')]).toEqual(['a', 'b', 'c', 'd'])
+  expect(pausedOf('').size).toBe(0)
 })

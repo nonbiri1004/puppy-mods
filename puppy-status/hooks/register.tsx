@@ -9,7 +9,7 @@ import {
   parseConversation, plain, plainLine, promptName, questionOf, recent, rowName, SESSIONS, shownState, sourceOf, stateWord, taskOf, waited, wrapOf,
 } from './sessions'
 import { ALARM_WORD, alarmOf, expandHome, NotPipeline } from './pipelines'
-import { everyOf, LOG_TAIL_BYTES, runsOf, SCHEDULE_WORD, scheduleState, schedulesOf } from './schedules'
+import { everyOf, LOG_TAIL_BYTES, pausedOf, runsOf, SCHEDULE_WORD, scheduleState, schedulesOf } from './schedules'
 import { claudeLimits, CODEX_LIMIT, CODEX_LOCK, CODEX_SESSIONS, CODEX_TAIL_BYTES, codexLimits, limitText, LOCK_OLD_MS, lockOf, readText } from './usage'
 
 const PANE = 'puppy-status'
@@ -157,12 +157,12 @@ async function loadUsage($: EngineInterface, home: string): Promise<Usage> {
 }
 
 // The folders typed in the settings. Empty: that card is off.
-type Folders = { statusDir: string; scheduleLogs: string; scheduleEvery: string }
+type Folders = { statusDir: string; scheduleLogs: string; scheduleEvery: string; paused: string }
 
 // Each job's last run, from the end of every *.log in the schedule logs folder. A log that can't
 // be read is named in `errors` and the other jobs still show; so are pieces of "schedule every"
 // it can't read.
-async function loadSchedules($: EngineInterface, dir: string, setting: string, errors: string[]): Promise<Schedule[]> {
+async function loadSchedules($: EngineInterface, dir: string, setting: string, paused: Set<string>, now: number, errors: string[]): Promise<Schedule[]> {
   const runs = []
   for (const f of await $.fs.list(dir)) {
     if (f.kind !== 'file' || !f.name.endsWith('.log') || f.name.startsWith('.') || !f.size) continue
@@ -175,14 +175,30 @@ async function loadSchedules($: EngineInterface, dir: string, setting: string, e
   }
   const { every, unread } = everyOf(setting)
   if (unread.length) errors.push(`schedule every 看不懂：${unread.join('、')}（寫成 daily 1d，單位 m h d w）`)
-  return schedulesOf(runs, every)
+  const out: Schedule[] = []
+  for (const s of schedulesOf(runs, every)) out.push({ ...s, isPaused: paused.has(s.job), seenAt: await seenAt($, s.job, now) })
+  return out
+}
+
+// When this pane first saw a job, kept in $.store under "seen:<job>" (this computer, every
+// conversation): a job is not called late before the pane has watched one whole interval of it.
+// A store that can't be read or written: not known, and late counts from the last start alone.
+async function seenAt($: EngineInterface, job: string, now: number): Promise<number | null> {
+  try {
+    const was = await $.store.get(`seen:${job}`)
+    if (typeof was === 'number') return was
+    await $.store.set(`seen:${job}`, now)
+    return now
+  } catch {
+    return null
+  }
 }
 
 // The pipelines that need a look, from every *.json in the status folder. A file caught halfway
 // through a write, a sync's half copy or a file that can't be read this minute keeps what the last
 // read said; a file of another format is not a pipeline's and is passed over.
 const alarmCache = new Map<string, PipelineAlarm | null>()
-async function loadAlarms($: EngineInterface, dir: string, now: number): Promise<PipelineAlarm[]> {
+async function loadAlarms($: EngineInterface, dir: string, now: number, paused: Set<string>): Promise<PipelineAlarm[]> {
   const out: PipelineAlarm[] = []
   for (const f of await $.fs.list(dir)) {
     if (f.kind !== 'file' || !f.name.endsWith('.json') || f.name.startsWith('.')) continue
@@ -193,7 +209,7 @@ async function loadAlarms($: EngineInterface, dir: string, now: number): Promise
     } catch (err) {
       alarm = err instanceof NotPipeline ? null : (alarmCache.get(f.name) ?? null)
     }
-    if (alarm) out.push(alarm)
+    if (alarm && !paused.has(alarm.pipeline)) out.push(alarm)
   }
   return out.sort((a, b) => a.title.localeCompare(b.title))
 }
@@ -210,8 +226,9 @@ async function loadFolders($: EngineInterface, home: string, folders: Folders, n
       return []
     }
   }
-  const schedules = await tryRead(folders.scheduleLogs, dir => loadSchedules($, dir, folders.scheduleEvery, errors))
-  const alarms = await tryRead(folders.statusDir, dir => loadAlarms($, dir, now))
+  const paused = pausedOf(folders.paused)
+  const schedules = await tryRead(folders.scheduleLogs, dir => loadSchedules($, dir, folders.scheduleEvery, paused, now, errors))
+  const alarms = await tryRead(folders.statusDir, dir => loadAlarms($, dir, now, paused))
   return { schedules, alarms, folderErrors: errors }
 }
 
@@ -479,6 +496,7 @@ export const register: Register = (on, options) => {
     statusDir: String(options.status_dir ?? ''),
     scheduleLogs: String(options.schedule_logs ?? ''),
     scheduleEvery: String(options.schedule_every ?? ''),
+    paused: String(options.paused ?? ''),
   }
 
   on('session.start', async ($, e, next) => {
@@ -731,10 +749,13 @@ export const register: Register = (on, options) => {
           const last = sc.startedAt ?? sc.endedAt
           const age = last == null ? '' : state === 'running' ? waited(now - last) : ago(now - last)
           const isBad = state === 'late' || state === 'failed'
+          // a paused job is said in grey, its name too: nothing to do about it
+          const isQuiet = state === 'paused'
+          const isBefore = state === 'late' || state === 'pending' || state === 'paused'
           return row(
             `schedule-${sc.job}`,
-            <Text wrap="truncate-end">{sc.job}</Text>,
-            <Text><Text color={isBad ? 'error' : state === 'running' ? 'success' : undefined} dimColor={state === 'ok'}>{SCHEDULE_WORD[state]}</Text><Text dimColor>{age ? ` · ${state === 'late' ? '上次 ' : ''}${age}` : ''}</Text></Text>,
+            <Text wrap="truncate-end" dimColor={isQuiet}>{sc.job}</Text>,
+            <Text><Text color={isBad ? 'error' : state === 'running' ? 'success' : undefined} dimColor={!isBad && state !== 'running'}>{SCHEDULE_WORD[state]}</Text><Text dimColor>{age ? ` · ${isBefore ? '上次 ' : ''}${age}` : ''}</Text></Text>,
           )
         })}
       </Box>

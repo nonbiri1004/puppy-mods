@@ -48,7 +48,8 @@ set **schedule logs** to a folder of logs that scheduled jobs (launchd, cron) ap
 - one log may hold several jobs, and one job may write to two logs: the newest start counts. an empty log names no job.
 - only the last 32 kb of a log is read: a run that prints more than that after its start line drops out of the card until its end line. keep long output in another file.
 - a job whose last start has no end after it (an end in the same second before it belongs to the run before) is `跑中` for six hours, then counts as failed (it stopped without saying so).
-- **schedule every** says how often a job should start, `daily 1d, weekly 7d` (`m`, `h`, `d`, `w`; pieces split by commas). a job that has not started for that long plus two hours is `該跑沒跑`, unless a run is still going. a job not named there is never late; a piece it can't read is said in the pane. a job that runs when something changes (not on a clock) is best left out of it.
+- **schedule every** says how often a job should start, `daily 1d, weekly 7d` (`m`, `h`, `d`, `w`; pieces split by commas). a job that has not started for that long plus two hours is `該跑沒跑`, unless a run is still going. a job not named there is never late; a piece it can't read is said in the pane.
+- a log can't tell a job just set up (its log may hold only a trial run) from one that missed its runs, so late counts from the last start or from when the pane first saw the job, whichever is later; before one interval has passed it says `等下一次`. a job you stopped on purpose (`launchctl disable` leaves no line) goes in the **paused** setting: `暫停中`, never late or failed. a job that runs when something changes (not on a clock) is best left out of it.
 
 ## the codex lock
 

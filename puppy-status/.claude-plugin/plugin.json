@@ -67,6 +67,12 @@
       "title": "Schedule every",
       "description": "Optional. How often each job in the schedule logs should run, e.g. \"daily 1d, weekly 7d\" (m, h or d). A job that has not started for that long (and two hours more) says 該跑沒跑. A job not named here is never late, only failed or not.",
       "default": ""
+    },
+    "paused": {
+      "type": "string",
+      "title": "Paused",
+      "description": "Optional. Jobs (from the schedule logs) and pipelines (their \"pipeline\" id) you paused on purpose, e.g. \"collector-tech-news, weekly\". A paused job shows as 暫停中 in grey and is never late or failed; a paused pipeline is left off the 產線 card. Empty: none.",
+      "default": ""
     }
   }
 }

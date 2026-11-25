@@ -401,6 +401,8 @@ test('產線 shows only the pipelines that need a look; 排程 says each job\'s 
     [`${LOGS}/watch.log`]: `===== ${stamp(T - 5 * 60_000)} watch 開始\n===== ${stamp(T - 4 * 60_000)} watch 結束：成功\n===== ${stamp(T - 60_000)} watch 開始\n`,
     [`${LOGS}/launchd.log`]: '',
   }
+  // the pane has watched these jobs for a week already
+  for (const job of ['daily', 'weekly', 'watch']) w.store.set(`seen:${job}`, T - 7 * DAY)
   const ui = await open($, 'terminal')
   const alarms = textOf(await ui.find({ key: 'card-alarms' }))
   expect(alarms).toContain('2 條要看')
@@ -497,4 +499,32 @@ test('neither Codex file: no lock or limit line', async ($, on) => {
   const usage = textOf(await ui.find({ key: 'card-usage' }))
   expect(usage).not.toContain('使用中')
   expect(usage).not.toContain('撞額度')
+})
+
+test('a job just set up is not late: 等下一次 until the pane has watched one interval, then 該跑沒跑', { options: { schedule_logs: '~/logs', schedule_every: 'daily 1d' } }, async ($, on) => {
+  const { w, clock } = world(on)
+  // only a trial run, three days ago
+  w.other = { [`${LOGS}/daily.log`]: `===== ${stamp(T - 3 * DAY)} daily 開始（/x）\n===== ${stamp(T - 3 * DAY + 5000)} daily 結束：成功\n` }
+  const ui = await open($)
+  expect(textOf(await ui.find({ key: 'card-schedules' }))).toContain('等下一次 · 上次 3 天前')
+  expect((await ui.findAll({ type: 'Text' })).some(t => t.props.color === 'error')).toBe(false)
+  expect(w.store.get('seen:daily')).toBe(T)
+  // a day and two hours later with no run: now it is late
+  w.store.set('seen:daily', T - 27 * HOUR)
+  await clock.advance(60_000)
+  await clock.settle()
+  expect(textOf(await ui.find({ key: 'card-schedules' }))).toContain('該跑沒跑')
+})
+
+test('paused on purpose: the job is 暫停中 in grey, the pipeline is left off 產線', { options: { schedule_logs: '~/logs', schedule_every: 'tech 1d', status_dir: '~/status', paused: 'tech, collector-tech-news' } }, async ($, on) => {
+  const { w } = world(on)
+  w.store.set('seen:tech', T - 30 * DAY)
+  w.other = {
+    [`${LOGS}/tech.log`]: `===== ${stamp(T - 8 * DAY)} tech 開始\n===== ${stamp(T - 8 * DAY + 5000)} tech 結束：有錯誤\n`,
+    [`${STATUS}/collector-tech-news.json`]: pipeline({ pipeline: 'collector-tech-news', title: '科技選題', state: 'error', updated: at(8 * DAY) }),
+  }
+  const ui = await open($)
+  expect(textOf(await ui.find({ key: 'card-schedules' }))).toContain('暫停中 · 上次 8 天前')
+  expect((await ui.findAll({ type: 'Text' })).some(t => t.props.color === 'error')).toBe(false)
+  expect(await ui.find({ key: 'card-alarms' })).toBeFalsy()
 })

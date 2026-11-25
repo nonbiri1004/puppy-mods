@@ -71,14 +71,24 @@ export function schedulesOf(runs: Run[], every: Record<string, number>): Schedul
     .sort((a, b) => a.job.localeCompare(b.job))
 }
 
-// One word for a job: running while a run is open (not yet six hours old); else late (it should
-// have started again by now), broken (the last run failed, or never ended), ok.
+// One word for a job: paused when you said so; running while a run is open (not yet six hours
+// old); else late (it should have started again by now), broken (the last run failed, or never
+// ended), ok. Late is counted from the last start or from when this pane first saw the job,
+// whichever is later: a job just set up (its log may hold only a trial run) or a pane just
+// installed has not missed anything it watched, so it is "pending" for its first interval.
 export function scheduleState(s: Schedule, now: number): ScheduleState {
+  if (s.isPaused) return 'paused'
   const isOpen = s.startedAt != null && s.endedAt == null
   if (isOpen && now - s.startedAt! <= RUN_MAX_MS) return 'running'
   const last = s.startedAt ?? s.endedAt
-  if (s.everyMs != null && last != null && now - last > s.everyMs + LATE_GRACE_MS) return 'late'
+  if (s.everyMs != null && last != null && now - last > s.everyMs + LATE_GRACE_MS) {
+    const watched = s.seenAt != null && s.seenAt > last ? s.seenAt : last
+    return now - watched > s.everyMs + LATE_GRACE_MS ? 'late' : 'pending'
+  }
   return isOpen || s.isOk === false ? 'failed' : 'ok'
 }
 
-export const SCHEDULE_WORD: Record<ScheduleState, string> = { ok: '成功', failed: '有錯誤', running: '跑中', late: '該跑沒跑' }
+// "collector-tech-news, weekly" → the names (jobs or pipelines) paused on purpose
+export const pausedOf = (setting: string) => new Set(setting.split(/[,;\s]+/).map(p => p.trim()).filter(Boolean))
+
+export const SCHEDULE_WORD: Record<ScheduleState, string> = { ok: '成功', failed: '有錯誤', running: '跑中', late: '該跑沒跑', pending: '等下一次', paused: '暫停中' }

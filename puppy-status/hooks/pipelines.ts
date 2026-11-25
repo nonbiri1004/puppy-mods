@@ -23,7 +23,7 @@ export function alarmOf(file: string, text: string, now: number): PipelineAlarm 
   if (!pipeline) throw new NotPipeline('no "pipeline"')
   const parsed = Date.parse(str(v.updated))
   const updated = Number.isNaN(parsed) ? null : parsed
-  const base = { file, title: str(v.title) || pipeline, headline: str(v.headline), updated }
+  const base = { file, pipeline, title: str(v.title) || pipeline, headline: str(v.headline), updated }
   if (v.state === 'error') return { ...base, kind: 'error' }
   const stale = typeof v.stale_after_sec === 'number' && v.stale_after_sec > 0 ? v.stale_after_sec * 1000 : null
   if (stale != null && updated != null && now - updated > stale) return { ...base, kind: 'quiet' }

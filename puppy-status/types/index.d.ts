@@ -46,13 +46,17 @@ export type Usage = {
 }
 
 // One scheduled job from its log (FORMAT.md, "schedule logs"): its last start and end, whether that
-// end said 成功, and how often it should run (the "schedule every" setting; null: not set).
-export type Schedule = { job: string; startedAt: number | null; endedAt: number | null; isOk: boolean | null; everyMs: number | null }
-export type ScheduleState = 'ok' | 'failed' | 'running' | 'late'
+// end said 成功, how often it should run (the "schedule every" setting; null: not set), whether it is
+// paused on purpose (the "paused" setting), and when this pane first saw it (null: not known).
+export type Schedule = {
+  job: string; startedAt: number | null; endedAt: number | null; isOk: boolean | null; everyMs: number | null
+  isPaused?: boolean; seenAt?: number | null
+}
+export type ScheduleState = 'ok' | 'failed' | 'running' | 'late' | 'pending' | 'paused'
 
 // A pipeline that needs a look: stopped on an error, quiet past its stale_after_sec, or (the live
 // stream) restarting. `updated` is when its file was last written (null: its "updated" is broken).
-export type PipelineAlarm = { file: string; title: string; headline: string; updated: number | null; kind: 'error' | 'quiet' | 'restarts' }
+export type PipelineAlarm = { file: string; pipeline: string; title: string; headline: string; updated: number | null; kind: 'error' | 'quiet' | 'restarts' }
 
 // A file the pane passed over, and why.
 export type Problem = { file: string; reason: string }
